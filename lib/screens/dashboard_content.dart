@@ -112,13 +112,13 @@ class DashboardContent extends StatelessWidget {
       text: provider.isScanning ? 'Scanning...' : 'Run Smart Scan',
       icon: Icons.radar,
       isLoading: provider.isScanning,
-      onPressed: () async {
-        await provider.runScan();
-        if (context.mounted && provider.lastScanResult != null) {
+      onPressed: () {
+        if (!provider.isScanning) {
+          provider.runScan(); // do not await here
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => ScanScreen(result: provider.lastScanResult!),
+              builder: (_) => const ScanScreen(),
             ),
           );
         }

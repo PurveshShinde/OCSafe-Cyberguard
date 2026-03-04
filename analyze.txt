@@ -1,0 +1,10 @@
+﻿Analyzing OCSafe-Cyberguard...                                  
+
+warning - Unused import: 'package:permission_handler/permission_handler.dart' - lib\providers\security_provider.dart:2:8 - unused_import
+warning - Unused import: 'package:provider/provider.dart' - lib\screens\permissions_screen.dart:2:8 - unused_import
+  error - The getter 'brand' isn't defined for the type 'DeviceHealthData' - lib\screens\profile_screen.dart:64:56 - undefined_getter
+  error - The getter 'model' isn't defined for the type 'DeviceHealthData' - lib\screens\profile_screen.dart:64:72 - undefined_getter
+  error - The name 'ApplicationWithInfo' isn't defined, so it can't be used in an 'is' expression - lib\services\app_scanner.dart:20:16 - type_test_with_undefined_name
+  error - The getter 'permissions' isn't defined for the type 'Application' - lib\services\app_scanner.dart:21:25 - undefined_getter
+  error - The getter 'installerPackageName' isn't defined for the type 'Application' - lib\services\app_scanner.dart:22:27 - undefined_getter
+

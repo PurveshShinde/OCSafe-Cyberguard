@@ -2,8 +2,9 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:ocsafe_cyberguard/models/scan_result.dart';
 import 'package:ocsafe_cyberguard/models/activity_log.dart';
+import 'package:ocsafe_cyberguard/models/threat.dart';
 
-/// SQLite database service for persisting scan history and activity logs.
+/// SQLite database service for persisting scan history, threats and activity logs.
 class DatabaseService {
   static Database? _database;
 
@@ -15,7 +16,7 @@ class DatabaseService {
 
   Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'ocsafe_cyberguard.db');
+    final path = join(dbPath, 'ocsafe_cyberguard_v2.db'); // v2 to avoid conflicts with old schema
 
     return await openDatabase(
       path,
@@ -32,6 +33,21 @@ class DatabaseService {
         ''');
 
         await db.execute('''
+          CREATE TABLE threats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scan_id INTEGER NOT NULL,
+            app_name TEXT NOT NULL,
+            package_name TEXT NOT NULL,
+            risk_level TEXT NOT NULL,
+            threat_score INTEGER NOT NULL,
+            reasons TEXT NOT NULL,
+            permissions TEXT NOT NULL,
+            recommendation TEXT NOT NULL,
+            FOREIGN KEY (scan_id) REFERENCES scan_results (id) ON DELETE CASCADE
+          )
+        ''');
+
+        await db.execute('''
           CREATE TABLE activity_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             message TEXT NOT NULL,
@@ -43,21 +59,50 @@ class DatabaseService {
     );
   }
 
-  /// Inserts a scan result and returns its id.
+  /// Inserts a scan result and returns its id. Also inserts associated threats.
   Future<int> insertScanResult(ScanResult result) async {
     final db = await database;
-    return await db.insert('scan_results', result.toMap());
+    
+    int scanId = 0;
+    
+    await db.transaction((txn) async {
+      scanId = await txn.insert('scan_results', result.toMap());
+      
+      for (var threat in result.threats) {
+        final threatMap = threat.toMap();
+        threatMap['scan_id'] = scanId;
+        threatMap.remove('id'); // let sqlite auto-increment
+        await txn.insert('threats', threatMap);
+      }
+    });
+
+    return scanId;
   }
 
-  /// Gets all scan results ordered by date descending.
+  /// Gets all scan results ordered by date descending, including their threats.
   Future<List<ScanResult>> getScanHistory() async {
     final db = await database;
-    final maps = await db.query(
+    final scanMaps = await db.query(
       'scan_results',
       orderBy: 'scan_date DESC',
       limit: 50,
     );
-    return maps.map((m) => ScanResult.fromMap(m)).toList();
+
+    List<ScanResult> results = [];
+    for (var scanMap in scanMaps) {
+      final scanId = scanMap['id'] as int;
+      
+      final threatMaps = await db.query(
+        'threats',
+        where: 'scan_id = ?',
+        whereArgs: [scanId],
+      );
+      
+      final threats = threatMaps.map((m) => Threat.fromMap(m)).toList();
+      results.add(ScanResult.fromMap(scanMap, threats: threats));
+    }
+
+    return results;
   }
 
   /// Inserts an activity log entry.
@@ -80,6 +125,7 @@ class DatabaseService {
   /// Clears all data (for testing/reset).
   Future<void> clearAll() async {
     final db = await database;
+    await db.delete('threats');
     await db.delete('scan_results');
     await db.delete('activity_logs');
   }

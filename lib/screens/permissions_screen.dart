@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:ocsafe_cyberguard/core/theme/app_theme.dart';
-import 'package:ocsafe_cyberguard/providers/security_provider.dart';
-import 'package:ocsafe_cyberguard/services/permission_service.dart';
 import 'package:ocsafe_cyberguard/widgets/simple_card.dart';
 
-/// Displays and monitors device permissions.
+/// Displays and monitors device permissions natively.
 class PermissionsScreen extends StatefulWidget {
   const PermissionsScreen({super.key});
 
@@ -15,57 +12,75 @@ class PermissionsScreen extends StatefulWidget {
 }
 
 class _PermissionsScreenState extends State<PermissionsScreen> {
+  final Map<Permission, PermissionStatus> _statuses = {};
+
+  final List<Permission> _monitoredPermissions = [
+    Permission.camera,
+    Permission.microphone,
+    Permission.location,
+    Permission.storage,  // Often used dynamically on Android
+    Permission.contacts,
+    Permission.sms,
+  ];
+
+  final Map<Permission, String> _permissionNames = {
+    Permission.camera: 'Camera',
+    Permission.microphone: 'Microphone',
+    Permission.location: 'Location',
+    Permission.storage: 'Storage',
+    Permission.contacts: 'Contacts',
+    Permission.sms: 'SMS',
+  };
+
   @override
   void initState() {
     super.initState();
-    // Refresh permissions when screen opens.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<SecurityProvider>().refreshPermissions();
-    });
+    _refreshPermissions();
+  }
+
+  Future<void> _refreshPermissions() async {
+    for (var perm in _monitoredPermissions) {
+      _statuses[perm] = await perm.status;
+    }
+    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('App Permissions')),
-      body: Consumer<SecurityProvider>(
-        builder: (context, provider, _) {
-          final statuses = provider.permissionStatuses;
-
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Text(
-                'Monitor which permissions are granted to apps on your device.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 16),
-              ...PermissionService.monitoredPermissions.map((permission) {
-                final status = statuses[permission];
-                return _permissionTile(context, permission, status);
-              }),
-              const SizedBox(height: 24),
-              _buildSummaryCard(context, statuses),
-              const SizedBox(height: 16),
-              OutlinedButton.icon(
-                onPressed: () => provider.permissionService.openSettings(),
-                icon: const Icon(Icons.settings),
-                label: const Text('Open App Settings'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.primary,
-                  side: const BorderSide(color: AppColors.primary),
-                  padding: const EdgeInsets.all(14),
-                ),
-              ),
-            ],
-          );
-        },
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(
+            'Monitor core permissions required by the scanner and overall device health.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 16),
+          ..._monitoredPermissions.map((permission) {
+            final status = _statuses[permission];
+            return _permissionTile(context, permission, status);
+          }),
+          const SizedBox(height: 24),
+          _buildSummaryCard(context),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: () => openAppSettings(),
+            icon: const Icon(Icons.settings),
+            label: const Text('Open App Settings'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              side: const BorderSide(color: AppColors.primary),
+              padding: const EdgeInsets.all(14),
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _permissionTile(BuildContext context, Permission permission, PermissionStatus? status) {
-    final name = PermissionService.permissionNames[permission] ?? 'Unknown';
+    final name = _permissionNames[permission] ?? 'Unknown';
     final isGranted = status?.isGranted ?? false;
     final isDenied = status?.isDenied ?? true;
     final isPermanentlyDenied = status?.isPermanentlyDenied ?? false;
@@ -92,13 +107,13 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
     Color statusColor;
     if (isGranted) {
       statusText = 'Granted';
-      statusColor = AppColors.warning;
+      statusColor = AppColors.primary;
     } else if (isPermanentlyDenied) {
       statusText = 'Denied';
-      statusColor = AppColors.primary;
+      statusColor = AppColors.warning;
     } else if (isDenied) {
       statusText = 'Not Granted';
-      statusColor = AppColors.primary;
+      statusColor = AppColors.textSecondary;
     } else {
       statusText = 'Unknown';
       statusColor = AppColors.textSecondary;
@@ -106,15 +121,19 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
 
     return SimpleCard(
       margin: const EdgeInsets.only(bottom: 8),
+      onTap: () async {
+        await permission.request();
+        await _refreshPermissions();
+      },
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: (isGranted ? AppColors.warning : AppColors.primary).withValues(alpha: 0.1),
+              color: statusColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, color: isGranted ? AppColors.warning : AppColors.primary),
+            child: Icon(icon, color: statusColor),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -123,7 +142,7 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
               children: [
                 Text(name, style: Theme.of(context).textTheme.titleMedium),
                 Text(
-                  isGranted ? 'This permission is currently granted' : 'Not granted — safe',
+                  isGranted ? 'This permission is currently granted to OcSafe' : 'Tap to request authorization',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
@@ -145,17 +164,18 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
     );
   }
 
-  Widget _buildSummaryCard(BuildContext context, Map<Permission, PermissionStatus> statuses) {
-    final granted = statuses.values.where((s) => s.isGranted).length;
-    final total = statuses.length;
+  Widget _buildSummaryCard(BuildContext context) {
+    final granted = _statuses.values.where((s) => s.isGranted).length;
+    final total = _statuses.length;
+    final allGranted = granted == total && total > 0;
 
     return SimpleCard(
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
           Icon(
-            granted == 0 ? Icons.check_circle : Icons.info,
-            color: granted == 0 ? AppColors.primary : AppColors.warning,
+            allGranted ? Icons.check_circle : Icons.info,
+            color: allGranted ? AppColors.primary : AppColors.warning,
             size: 36,
           ),
           const SizedBox(height: 8),
@@ -165,9 +185,9 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            granted == 0
-                ? 'Great! No sensitive permissions are granted.'
-                : 'Review granted permissions for potential risks.',
+            allGranted
+                ? 'Great! The app has full capabilities to scan.'
+                : 'Consider granting permissions for better scanning.',
             style: Theme.of(context).textTheme.bodySmall,
             textAlign: TextAlign.center,
           ),

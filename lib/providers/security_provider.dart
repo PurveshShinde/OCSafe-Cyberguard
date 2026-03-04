@@ -1,95 +1,136 @@
 import 'package:flutter/material.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:ocsafe_cyberguard/models/threat.dart';
 import 'package:ocsafe_cyberguard/models/scan_result.dart';
 import 'package:ocsafe_cyberguard/models/activity_log.dart';
-import 'package:ocsafe_cyberguard/services/scan_service.dart';
-import 'package:ocsafe_cyberguard/services/permission_service.dart';
-import 'package:ocsafe_cyberguard/services/browsing_service.dart';
-import 'package:ocsafe_cyberguard/services/optimization_service.dart';
+import 'package:ocsafe_cyberguard/models/app_info.dart';
+
+import 'package:ocsafe_cyberguard/services/app_scanner.dart';
+import 'package:ocsafe_cyberguard/services/apk_scanner.dart';
+import 'package:ocsafe_cyberguard/services/threat_analyzer.dart';
+import 'package:ocsafe_cyberguard/services/device_health_service.dart';
 import 'package:ocsafe_cyberguard/services/database_service.dart';
 import 'package:ocsafe_cyberguard/services/preferences_service.dart';
 
-/// Central state manager for the entire app.
+/// Central state manager orchestrating the multi-module security scan.
 class SecurityProvider extends ChangeNotifier {
-  final ScanService _scanService = ScanService();
-  final PermissionService _permissionService = PermissionService();
-  final BrowsingService _browsingService = BrowsingService();
-  final OptimizationService _optimizationService = OptimizationService();
+  final AppScanner _appScanner = AppScanner();
+  final ApkScanner _apkScanner = ApkScanner();
+  final ThreatAnalyzer _threatAnalyzer = ThreatAnalyzer();
+  final DeviceHealthService _deviceHealthService = DeviceHealthService();
   final DatabaseService _databaseService = DatabaseService();
   final PreferencesService _preferencesService = PreferencesService();
 
   // --- State ---
   int _securityScore = 100;
   bool _isScanning = false;
+  String _scanStage = '';
+  
   ScanResult? _lastScanResult;
   List<Threat> _threats = [];
   List<ActivityLog> _activityLogs = [];
   List<ScanResult> _scanHistory = [];
-  Map<Permission, PermissionStatus> _permissionStatuses = {};
-  DeviceData? _deviceData;
-  int _batteryLevel = -1;
+  
+  DeviceHealthData? _deviceData;
 
   // Settings
   bool _realtimeProtection = true;
   bool _safeBrowsing = true;
   bool _autoScan = false;
-
-  // User profile
   String _userName = 'User';
   String _userEmail = '';
 
   // --- Getters ---
   int get securityScore => _securityScore;
   bool get isScanning => _isScanning;
+  String get scanStage => _scanStage;
   ScanResult? get lastScanResult => _lastScanResult;
   List<Threat> get threats => _threats;
   List<ActivityLog> get activityLogs => _activityLogs;
   List<ScanResult> get scanHistory => _scanHistory;
-  Map<Permission, PermissionStatus> get permissionStatuses => _permissionStatuses;
-  DeviceData? get deviceData => _deviceData;
-  int get batteryLevel => _batteryLevel;
+  DeviceHealthData? get deviceData => _deviceData;
+
   bool get realtimeProtection => _realtimeProtection;
   bool get safeBrowsing => _safeBrowsing;
   bool get autoScan => _autoScan;
   String get userName => _userName;
   String get userEmail => _userEmail;
 
-  // Service access
-  BrowsingService get browsingService => _browsingService;
-  PermissionService get permissionService => _permissionService;
-
   /// Initialize all data on app start.
   Future<void> initialize() async {
     await _loadSettings();
-    await _browsingService.loadBlacklist();
-    await refreshPermissions();
     await loadDeviceInfo();
     await loadHistory();
     await loadActivityLogs();
-    _recalculateScore();
   }
 
-  /// Runs a full smart security scan.
+  /// Runs a full smart security scan with staged timing for UX.
   Future<void> runScan() async {
+    if (_isScanning) return; // prevent multiple scans
+    
     _isScanning = true;
-    notifyListeners();
-
+    _threats.clear();
+    
     try {
-      // Scan installed apps
-      final apps = await _scanService.scanInstalledApps();
-      _threats = _scanService.detectSuspiciousApps(apps);
+      // 1. Scan installed apps
+      _scanStage = 'Scanning installed apps...';
+      notifyListeners();
+      await Future.delayed(const Duration(milliseconds: 800));
+      
+      final rawApps = await _appScanner.fetchRawInstalledApps();
 
-      // Refresh permissions
-      await refreshPermissions();
+      // 2. Analyze permissions
+      _scanStage = 'Analyzing permissions...';
+      notifyListeners();
+      await Future.delayed(const Duration(milliseconds: 800));
 
-      // Calculate score
-      final dangerousCount = _permissionService.countGrantedDangerous(_permissionStatuses);
-      _securityScore = _scanService.calculateSecurityScore(
-        threatCount: _threats.length,
-        dangerousPermissions: dangerousCount,
-        realtimeProtectionEnabled: _realtimeProtection,
-      );
+      // 3. Suspicious packages analysis
+      _scanStage = 'Detecting suspicious packages...';
+      notifyListeners();
+      await Future.delayed(const Duration(milliseconds: 800));
+
+      int dangerousCount = 0;
+      List<AppInfo> apps = [];
+      List<Threat> detectedThreats = [];
+
+      for (var rawApp in rawApps) {
+        AppInfo appInfo = _appScanner.mapToAppInfo(rawApp);
+        apps.add(appInfo);
+
+        // Analyze app for all threats (includes fake app, keyword, permissions)
+        Threat? threat = _threatAnalyzer.analyzeApp(appInfo);
+        if (threat != null) {
+          detectedThreats.add(threat);
+          if (threat.permissionsRequested.isNotEmpty) dangerousCount++;
+        }
+      }
+
+      // 4. Scan for APK installers
+      _scanStage = 'Scanning APK files...';
+      notifyListeners();
+      await Future.delayed(const Duration(milliseconds: 800));
+      
+      final apkPaths = await _apkScanner.scanForApks();
+      final apkThreats = _threatAnalyzer.evaluateApks(apkPaths);
+      detectedThreats.addAll(apkThreats);
+
+      // 5. Calculate threats & generate report
+      _scanStage = 'Calculating threats & generating report...';
+      notifyListeners();
+      await Future.delayed(const Duration(milliseconds: 800));
+
+      _threats = detectedThreats;
+
+      // Score Formula
+      int highRiskApps = _threats.where((t) => t.riskLevel == 'HIGH').length;
+      int mediumRiskApps = _threats.where((t) => t.riskLevel == 'MEDIUM').length;
+
+      int score = 100 
+                  - (highRiskApps * 20) 
+                  - (mediumRiskApps * 10) 
+                  - (dangerousCount * 5) 
+                  - (_realtimeProtection ? 0 : 20);
+
+      _securityScore = score.clamp(0, 100);
 
       // Create scan result
       _lastScanResult = ScanResult(
@@ -103,42 +144,31 @@ class SecurityProvider extends ChangeNotifier {
       // Persist to database
       await _databaseService.insertScanResult(_lastScanResult!);
 
-      // Log activity
+      // Log completion
       await _logActivity(
         'Scan completed: ${apps.length} apps scanned, ${_threats.length} threats found',
         ActivityType.scan,
       );
 
-      if (_threats.isNotEmpty) {
-        for (final threat in _threats) {
-          await _logActivity(
-            'Threat detected: ${threat.appName} — ${threat.reason}',
-            ActivityType.threat,
-          );
-        }
-      }
-
-      // Refresh history
-      await loadHistory();
-      await loadActivityLogs();
     } catch (e) {
       await _logActivity('Scan failed: $e', ActivityType.scan);
+    } finally {
+      _isScanning = false;
+      _scanStage = '';
+      await loadHistory();
+      await loadActivityLogs();
+      notifyListeners();
     }
-
-    _isScanning = false;
-    notifyListeners();
   }
 
   /// Toggles real-time protection on/off.
   Future<void> toggleRealtimeProtection(bool value) async {
     _realtimeProtection = value;
     await _preferencesService.setRealtimeProtection(value);
-    _recalculateScore();
     await _logActivity(
       'Real-time protection ${value ? "enabled" : "disabled"}',
       ActivityType.protection,
     );
-    await loadActivityLogs();
     notifyListeners();
   }
 
@@ -156,16 +186,9 @@ class SecurityProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Refreshes permission statuses.
-  Future<void> refreshPermissions() async {
-    _permissionStatuses = await _permissionService.checkAllPermissions();
-    notifyListeners();
-  }
-
-  /// Loads device info and battery level.
+  /// Loads device info.
   Future<void> loadDeviceInfo() async {
-    _deviceData = await _optimizationService.getDeviceInfo();
-    _batteryLevel = await _optimizationService.getBatteryLevel();
+    _deviceData = await _deviceHealthService.getDeviceHealth();
     notifyListeners();
   }
 
@@ -181,14 +204,12 @@ class SecurityProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Updates user profile name.
   Future<void> updateUserName(String name) async {
     _userName = name;
     await _preferencesService.setUserName(name);
     notifyListeners();
   }
 
-  /// Updates user profile email.
   Future<void> updateUserEmail(String email) async {
     _userEmail = email;
     await _preferencesService.setUserEmail(email);
@@ -203,16 +224,6 @@ class SecurityProvider extends ChangeNotifier {
     _autoScan = await _preferencesService.getAutoScan();
     _userName = await _preferencesService.getUserName();
     _userEmail = await _preferencesService.getUserEmail();
-    notifyListeners();
-  }
-
-  void _recalculateScore() {
-    final dangerousCount = _permissionService.countGrantedDangerous(_permissionStatuses);
-    _securityScore = _scanService.calculateSecurityScore(
-      threatCount: _threats.length,
-      dangerousPermissions: dangerousCount,
-      realtimeProtectionEnabled: _realtimeProtection,
-    );
     notifyListeners();
   }
 

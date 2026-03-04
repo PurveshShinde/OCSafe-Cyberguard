@@ -1,6 +1,6 @@
 import 'package:ocsafe_cyberguard/models/threat.dart';
 
-/// Result of a security scan.
+/// Result of a security scan (ScanReport).
 class ScanResult {
   final int? id;
   final DateTime scanDate;
@@ -20,6 +20,7 @@ class ScanResult {
 
   Map<String, dynamic> toMap() {
     return {
+      'id': id,
       'scan_date': scanDate.toIso8601String(),
       'total_apps_scanned': totalAppsScanned,
       'threat_count': threatCount,
@@ -27,13 +28,14 @@ class ScanResult {
     };
   }
 
-  factory ScanResult.fromMap(Map<String, dynamic> map) {
+  factory ScanResult.fromMap(Map<String, dynamic> map, {List<Threat> threats = const []}) {
     return ScanResult(
       id: map['id'] as int?,
       scanDate: DateTime.parse(map['scan_date'] as String),
       totalAppsScanned: map['total_apps_scanned'] as int,
       threatCount: map['threat_count'] as int,
       securityScore: map['security_score'] as int,
+      threats: threats,
     );
   }
 }

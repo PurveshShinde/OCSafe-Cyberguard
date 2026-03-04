@@ -28,7 +28,6 @@ class _OptimizationScreenState extends State<OptimizationScreen> {
       body: Consumer<SecurityProvider>(
         builder: (context, provider, _) {
           final device = provider.deviceData;
-          final battery = provider.batteryLevel;
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -41,12 +40,12 @@ class _OptimizationScreenState extends State<OptimizationScreen> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: _batteryColor(battery).withValues(alpha: 0.1),
+                        color: _batteryColor(device?.batteryLevel ?? -1).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
-                        _batteryIcon(battery),
-                        color: _batteryColor(battery),
+                        _batteryIcon(device?.batteryLevel ?? -1),
+                        color: _batteryColor(device?.batteryLevel ?? -1),
                         size: 28,
                       ),
                     ),
@@ -56,9 +55,9 @@ class _OptimizationScreenState extends State<OptimizationScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            battery >= 0 ? '$battery%' : 'Unknown',
+                            (device != null && device.batteryLevel >= 0) ? '${device.batteryLevel}%' : 'Unknown',
                             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                  color: _batteryColor(battery),
+                                  color: _batteryColor(device?.batteryLevel ?? -1),
                                 ),
                           ),
                           Text('Battery Level',
@@ -66,15 +65,15 @@ class _OptimizationScreenState extends State<OptimizationScreen> {
                         ],
                       ),
                     ),
-                    if (battery >= 0)
+                    if (device != null && device.batteryLevel >= 0)
                       SizedBox(
                         width: 60,
                         height: 60,
                         child: CircularProgressIndicator(
-                          value: battery / 100,
+                          value: device.batteryLevel / 100,
                           strokeWidth: 6,
                           backgroundColor: AppColors.surfaceLight,
-                          valueColor: AlwaysStoppedAnimation(_batteryColor(battery)),
+                          valueColor: AlwaysStoppedAnimation(_batteryColor(device.batteryLevel)),
                         ),
                       ),
                   ],
@@ -86,18 +85,13 @@ class _OptimizationScreenState extends State<OptimizationScreen> {
               // Device Info
               _buildSectionTitle(context, 'Device Information'),
               if (device != null) ...[
-                _infoTile(context, 'Brand', device.brand, Icons.phone_android),
-                _infoTile(context, 'Model', device.model, Icons.smartphone),
+                _infoTile(context, 'Model', device.deviceModel, Icons.smartphone),
                 _infoTile(context, 'Android Version', device.androidVersion, Icons.android),
-                _infoTile(context, 'SDK Level', device.sdkVersion, Icons.developer_mode),
-                _infoTile(context, 'Manufacturer', device.manufacturer, Icons.factory),
-                _infoTile(context, 'Device Type',
-                    device.isPhysicalDevice ? 'Physical' : 'Emulator',
-                    Icons.devices),
+                _infoTile(context, 'Storage Used', '${device.storageUsedPercentage}%', Icons.storage),
               ] else
                 const SimpleCard(
                   child: Center(
-                    child: Padding(
+                     child: Padding(
                       padding: EdgeInsets.all(24),
                       child: CircularProgressIndicator(),
                     ),

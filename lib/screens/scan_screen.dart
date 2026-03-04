@@ -1,182 +1,107 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:ocsafe_cyberguard/core/theme/app_theme.dart';
-import 'package:ocsafe_cyberguard/models/scan_result.dart';
-import 'package:ocsafe_cyberguard/models/threat.dart';
-import 'package:ocsafe_cyberguard/widgets/simple_card.dart';
+import 'package:ocsafe_cyberguard/providers/security_provider.dart';
+import 'package:ocsafe_cyberguard/screens/report_detail_screen.dart';
 
-/// Displays the results of a security scan.
+/// Displays the animated security scan and auto-transitions to report.
 class ScanScreen extends StatelessWidget {
-  final ScanResult result;
-
-  const ScanScreen({super.key, required this.result});
+  const ScanScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final scoreColor = result.securityScore >= 80
-        ? AppColors.primary
-        : result.securityScore >= 50
-            ? AppColors.warning
-            : AppColors.error;
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Scan Results')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Summary card
-            SimpleCard(
-              padding: const EdgeInsets.all(24),
-              child: Row(
+      appBar: AppBar(title: const Text('Smart Scan')),
+      body: Consumer<SecurityProvider>(
+        builder: (context, provider, _) {
+          if (!provider.isScanning && provider.lastScanResult != null) {
+            // Once scan is done, we could automatically pop and push the report 
+            // but for a better UX, we just show a "Scan Complete" and a button.
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  SizedBox(
-                    width: 80,
-                    height: 80,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        CircularProgressIndicator(
-                          value: result.securityScore / 100,
-                          strokeWidth: 8,
-                          backgroundColor: AppColors.surfaceLight,
-                          valueColor: AlwaysStoppedAnimation(scoreColor),
-                        ),
-                        Text(
-                          '${result.securityScore}',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                color: scoreColor,
-                                fontWeight: FontWeight.bold,
-                              ),
-                        ),
-                      ],
+                  const Icon(Icons.check_circle, color: AppColors.primary, size: 80),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Scan Complete!',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    '${provider.lastScanResult!.threatCount} threats found',
+                    style: TextStyle(
+                      color: provider.lastScanResult!.threatCount > 0 ? AppColors.error : AppColors.primary,
+                      fontSize: 16,
                     ),
                   ),
-                  const SizedBox(width: 20),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${result.totalAppsScanned} apps scanned',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${result.threatCount} threat${result.threatCount != 1 ? 's' : ''} found',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: result.threatCount > 0 ? AppColors.error : AppColors.primary,
-                              ),
-                        ),
-                      ],
+                  const SizedBox(height: 32),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
                     ),
+                    onPressed: () {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ReportDetailScreen(result: provider.lastScanResult!),
+                        ),
+                      );
+                    },
+                    child: const Text('View Detailed Report', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 24),
+            );
+          }
 
-            // Threats list
-            if (result.threats.isEmpty) ...[
-              SimpleCard(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      children: [
-                        const Icon(Icons.check_circle, color: AppColors.primary, size: 48),
-                        const SizedBox(height: 12),
-                        Text(
-                          'No threats detected',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Your device looks safe.',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ] else ...[
-              Text('Threats Found', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 12),
-              ...result.threats.map((threat) => _threatTile(context, threat)),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _threatTile(BuildContext context, Threat threat) {
-    Color severityColor;
-    String severityLabel;
-
-    switch (threat.severity) {
-      case ThreatSeverity.high:
-        severityColor = AppColors.error;
-        severityLabel = 'HIGH';
-        break;
-      case ThreatSeverity.medium:
-        severityColor = AppColors.warning;
-        severityLabel = 'MEDIUM';
-        break;
-      case ThreatSeverity.low:
-        severityColor = AppColors.textSecondary;
-        severityLabel = 'LOW';
-        break;
-    }
-
-    return SimpleCard(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: severityColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(Icons.warning, color: severityColor, size: 24),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
+          // Animated Scanning Stage
+          return Center(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  threat.appName,
-                  style: Theme.of(context).textTheme.titleMedium,
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox(
+                      width: 150,
+                      height: 150,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 4,
+                        color: AppColors.primary.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 120,
+                      height: 120,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 8,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    const Icon(Icons.radar, size: 50, color: AppColors.primary),
+                  ],
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 40),
                 Text(
-                  threat.reason,
+                  provider.scanStage.isNotEmpty ? provider.scanStage : 'Initializing scanner...',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.1,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Please do not close the app',
                   style: Theme.of(context).textTheme.bodySmall,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: severityColor.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              severityLabel,
-              style: TextStyle(
-                color: severityColor,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }

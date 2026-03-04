@@ -6,6 +6,8 @@ import 'package:ocsafe_cyberguard/providers/security_provider.dart';
 import 'package:ocsafe_cyberguard/models/scan_result.dart';
 import 'package:ocsafe_cyberguard/widgets/simple_card.dart';
 
+import 'package:ocsafe_cyberguard/screens/report_detail_screen.dart';
+
 /// Displays scan history from the database.
 class ReportsScreen extends StatelessWidget {
   const ReportsScreen({super.key});
@@ -59,6 +61,14 @@ class ReportsScreen extends StatelessWidget {
 
     return SimpleCard(
       margin: const EdgeInsets.only(bottom: 12),
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ReportDetailScreen(result: result),
+          ),
+        );
+      },
       child: Row(
         children: [
           SizedBox(

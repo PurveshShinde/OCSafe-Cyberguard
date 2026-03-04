@@ -58,10 +58,10 @@ class ProfileScreen extends StatelessWidget {
                       padding: const EdgeInsets.all(16),
                       child: Column(
                         children: [
-                          Icon(Icons.smartphone, color: AppColors.textSecondary),
+                          const Icon(Icons.smartphone, color: AppColors.textSecondary),
                           const SizedBox(height: 8),
                           Text(
-                            device != null ? '${device.brand} ${device.model}' : 'Loading...',
+                            device != null ? device.deviceModel : 'Loading...',
                             textAlign: TextAlign.center,
                             style: Theme.of(context).textTheme.bodySmall,
                             maxLines: 2,
