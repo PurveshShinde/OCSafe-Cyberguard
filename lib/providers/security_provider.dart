@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:ocsafe_cyberguard/models/threat.dart';
 import 'package:ocsafe_cyberguard/models/scan_result.dart';
 import 'package:ocsafe_cyberguard/models/activity_log.dart';
@@ -102,11 +104,40 @@ class SecurityProvider extends ChangeNotifier {
               ActivityType.protection,
             );
           }
+          _updateScore();
+          notifyListeners();
+          await loadActivityLogs();
+        }
+      } else if (event.event == ApplicationEventType.uninstalled) {
+        // If an app was uninstalled, check if it was currently flagged as a threat
+        final initialLength = _threats.length;
+        _threats.removeWhere((t) => t.packageName == event.packageName);
+
+        if (_threats.length < initialLength) {
+           await _logActivity(
+            'Threat Removed: ${event.packageName} was successfully uninstalled.',
+            ActivityType.protection,
+          );
+          _updateScore();
           notifyListeners();
           await loadActivityLogs();
         }
       }
     });
+  }
+
+  void _updateScore() {
+    int highRiskApps = _threats.where((t) => t.riskLevel == 'HIGH').length;
+    int mediumRiskApps = _threats.where((t) => t.riskLevel == 'MEDIUM').length;
+    int dangerousCount = _threats.where((t) => t.permissionsRequested.isNotEmpty).length;
+
+    int score = 100 
+                - (highRiskApps * 20) 
+                - (mediumRiskApps * 10) 
+                - (dangerousCount * 5) 
+                - (_realtimeProtection ? 0 : 20);
+
+    _securityScore = score.clamp(0, 100);
   }
 
   /// Runs a full smart security scan with staged timing for UX.
@@ -122,12 +153,13 @@ class SecurityProvider extends ChangeNotifier {
       notifyListeners();
       await Future.delayed(const Duration(milliseconds: 800));
 
-      // 2. Fetch apps WITH real permissions for accurate analysis
+      // 2. Fetch apps WITH real permissions for accurate analysis (in background isolate)
       _scanStage = 'Analyzing app permissions...';
       notifyListeners();
       await Future.delayed(const Duration(milliseconds: 800));
 
-      final List<AppInfo> apps = await _appScanner.fetchAllAppsWithPermissions();
+      final RootIsolateToken token = RootIsolateToken.instance!;
+      final List<AppInfo> apps = await compute(fetchAllAppsBackground, token);
 
       // 3. Suspicious packages analysis + threat detection
       _scanStage = 'Detecting malware & suspicious packages...';
@@ -160,18 +192,7 @@ class SecurityProvider extends ChangeNotifier {
       await Future.delayed(const Duration(milliseconds: 800));
 
       _threats = detectedThreats;
-
-      // Score Formula
-      int highRiskApps = _threats.where((t) => t.riskLevel == 'HIGH').length;
-      int mediumRiskApps = _threats.where((t) => t.riskLevel == 'MEDIUM').length;
-
-      int score = 100 
-                  - (highRiskApps * 20) 
-                  - (mediumRiskApps * 10) 
-                  - (dangerousCount * 5) 
-                  - (_realtimeProtection ? 0 : 20);
-
-      _securityScore = score.clamp(0, 100);
+      _updateScore();
 
       // Create scan result
       _lastScanResult = ScanResult(

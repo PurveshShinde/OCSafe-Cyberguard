@@ -5,6 +5,7 @@ class AppInfo {
   final bool isSystemApp;
   final String? installSource;
   final List<String> requestedPermissions;
+  final bool hasLaunchIntent;
 
   const AppInfo({
     required this.appName,
@@ -13,6 +14,7 @@ class AppInfo {
     required this.isSystemApp,
     this.installSource,
     this.requestedPermissions = const [],
+    this.hasLaunchIntent = true,
   });
 
   Map<String, dynamic> toMap() {
@@ -23,6 +25,7 @@ class AppInfo {
       'isSystemApp': isSystemApp,
       'installSource': installSource,
       'requestedPermissions': requestedPermissions,
+      'hasLaunchIntent': hasLaunchIntent,
     };
   }
 }

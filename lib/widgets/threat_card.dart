@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:ocsafe_cyberguard/core/theme/app_theme.dart';
 import 'package:ocsafe_cyberguard/models/threat.dart';
+import 'package:ocsafe_cyberguard/services/uninstall_service.dart';
 
 class ThreatCard extends StatelessWidget {
   final Threat threat;
@@ -93,9 +94,34 @@ class ThreatCard extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _handleUninstall(context),
+                icon: const Icon(Icons.delete_forever, color: Colors.white),
+                label: const Text('UNINSTALL APP', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.error,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            )
           ],
         ),
       ),
     );
+  }
+
+  void _handleUninstall(BuildContext context) async {
+      try {
+        await UninstallService.uninstallApp(threat.packageName);
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+           SnackBar(content: Text('Could not initiate uninstall: $e'), backgroundColor: AppColors.error),
+        );
+      }
   }
 }

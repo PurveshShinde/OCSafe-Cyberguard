@@ -81,6 +81,48 @@ class ThreatAnalyzer {
     'netflix': 'com.netflix.mediaclient',
   };
 
+  // --- Known legitimate hidden apps (allowlist for stealth checks) ---
+  static const List<String> safeHiddenPackages = [
+    // Core Google/Android
+    'com.google.android.gms',
+    'com.android.systemui',
+    'com.android.vending',
+    'com.google.android.gsf',
+    'com.google.android.ext.services',
+    'com.google.android.as', // Android System Intelligence
+    'com.google.android.networkstack.tethering',
+    'com.android.keychain',
+    'com.android.settings',
+
+    // Common OEMs (OnePlus, Samsung, Xiaomi, etc.)
+    'com.oneplus.widget',
+    'net.oneplus.widget',
+    'com.oneplus.security',
+    'com.oneplus.camera.service',
+    'com.oplus.security',
+    'com.oplus.battery',
+    'com.oplus.pay',
+    'com.samsung.android.lool',
+    'com.samsung.android.securitylogagent',
+    'com.xiaomi.discover',
+    'com.coloros.safecenter',
+    'com.heytap.mcs',
+
+    // Other System level components
+    'com.android.providers.media.module',
+    'com.android.providers.telephony',
+    'com.android.bluetooth',
+    'com.android.nfc',
+    'com.android.certinstaller',
+    
+    // Media / Companion Apps mentioned by user
+    'com.android.soundrecorder',
+    'com.heytap.speechassist',
+    'com.google.android.setupwizard',
+    'com.coloros.lockassistant', // Lock screen magazine
+    'com.heytap.pictorial', // Lock screen magazine alternative
+  ];
+
   /// Main method for analyzing an app on the fly.
   Threat? analyzeApp(AppInfo app) {
     if (app.isSystemApp) return null;
@@ -162,6 +204,55 @@ class ThreatAnalyzer {
       reasons.add('App impersonates popular application (e.g., WhatsApp, Instagram)');
       totalScore += 40;
       recommendation = 'Fake app detected. Immediate uninstall strongly recommended.';
+    }
+
+    // 5.5 Hidden App Detection (No Launcher Icon + Suspicious Permissions)
+    // Check allowlist AND common trusted namespaces (Google, OEMs, Android System)
+    bool isTrustedNamespace = app.packageName.startsWith('com.android.') ||
+                              app.packageName.startsWith('com.google.') ||
+                              app.packageName.startsWith('com.samsung.') ||
+                              app.packageName.startsWith('com.oneplus.') ||
+                              app.packageName.startsWith('com.oplus.') ||
+                              app.packageName.startsWith('com.coloros.') ||
+                              app.packageName.startsWith('com.xiaomi.') ||
+                              app.packageName.startsWith('com.huawei.') ||
+                              app.packageName.startsWith('com.heytap.');
+
+    if (!app.isSystemApp && 
+        !app.hasLaunchIntent && 
+        !safeHiddenPackages.contains(app.packageName) &&
+        !isTrustedNamespace) {
+      print("🕵️ Hidden app detected: ${app.packageName} (${app.appName})");
+      reasons.add('Hidden App: No launcher icon.');
+      int hiddenScore = 40;
+
+      if (app.requestedPermissions.contains('android.permission.RECEIVE_BOOT_COMPLETED')) {
+        hiddenScore += 20;
+        reasons.add('Runs automatically on boot.');
+      }
+      if (app.requestedPermissions.contains('android.permission.BIND_ACCESSIBILITY_SERVICE')) {
+        hiddenScore += 40;
+        reasons.add('Uses accessibility service.');
+      }
+      if (app.requestedPermissions.contains('android.permission.SYSTEM_ALERT_WINDOW')) {
+        hiddenScore += 30;
+        reasons.add('Uses overlay attack permission.');
+      }
+      if (app.requestedPermissions.contains('android.permission.FOREGROUND_SERVICE')) {
+        hiddenScore += 20;
+        reasons.add('Runs in background (foreground service).');
+      }
+      if (app.requestedPermissions.contains('android.permission.INTERNET')) {
+        hiddenScore += 10;
+        reasons.add('Has network capability.');
+      }
+
+      totalScore += hiddenScore;
+      if (recommendation == 'Review app usage or uninstall if unfamiliar.') {
+          recommendation = 'App hides from your app drawer and has suspicious permissions. This is a common tactic for stealth malware. Uninstall highly recommended.';
+      } else if (totalScore >= 70 && recommendation.contains('Review app usage')) {
+          recommendation = 'High risk: App is hidden and severely overly-privileged. Uninstall highly recommended.';
+      }
     }
 
     // 6. Unknown Install Source — flag only when combined with other issues

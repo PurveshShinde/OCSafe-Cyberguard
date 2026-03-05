@@ -1,5 +1,14 @@
 import 'package:device_apps/device_apps.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:ocsafe_cyberguard/models/app_info.dart';
+
+@pragma('vm:entry-point')
+Future<List<AppInfo>> fetchAllAppsBackground(RootIsolateToken token) async {
+  BackgroundIsolateBinaryMessenger.ensureInitialized(token);
+  final scanner = AppScanner();
+  return await scanner.fetchAllAppsWithPermissions();
+}
 
 class AppScanner {
   /// Fetches the list of installed applications via device_apps.
@@ -12,7 +21,7 @@ class AppScanner {
 
   /// Maps a native Application to our AppInfo domain model.
   /// Fetches permissions individually for each app.
-  AppInfo mapToAppInfo(Application app) {
+  AppInfo mapToAppInfo(Application app, {bool hasLaunchIntent = true}) {
     final installSource = _safeInstallerPackage(app);
     final permissions = _safePermissions(app);
 
@@ -23,6 +32,7 @@ class AppScanner {
       isSystemApp: app.systemApp,
       installSource: installSource,
       requestedPermissions: permissions,
+      hasLaunchIntent: hasLaunchIntent,
     );
   }
 
@@ -38,15 +48,25 @@ class AppScanner {
     final rawApps = await DeviceApps.getInstalledApplications(
       includeSystemApps: true,
       includeAppIcons: false,
+      onlyAppsWithLaunchIntent: false,
     );
+
+    final launchableAppsRaw = await DeviceApps.getInstalledApplications(
+      includeSystemApps: true,
+      includeAppIcons: false,
+      onlyAppsWithLaunchIntent: true,
+    );
+    final launchablePackages = launchableAppsRaw.map((e) => e.packageName).toSet();
+
     final List<AppInfo> result = [];
     for (final raw in rawApps) {
+      final bool hasLaunch = launchablePackages.contains(raw.packageName);
       // Re-fetch each app with permissions: true to get requestedPermissions
       final appWithPerms = await DeviceApps.getApp(raw.packageName, true);
       if (appWithPerms != null) {
-        result.add(mapToAppInfo(appWithPerms));
+        result.add(mapToAppInfo(appWithPerms, hasLaunchIntent: hasLaunch));
       } else {
-        result.add(mapToAppInfo(raw));
+        result.add(mapToAppInfo(raw, hasLaunchIntent: hasLaunch));
       }
     }
     return result;
