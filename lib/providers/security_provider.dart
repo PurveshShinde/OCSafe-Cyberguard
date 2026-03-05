@@ -10,6 +10,8 @@ import 'package:ocsafe_cyberguard/services/threat_analyzer.dart';
 import 'package:ocsafe_cyberguard/services/device_health_service.dart';
 import 'package:ocsafe_cyberguard/services/database_service.dart';
 import 'package:ocsafe_cyberguard/services/preferences_service.dart';
+import 'package:ocsafe_cyberguard/services/notification_service.dart';
+import 'package:device_apps/device_apps.dart';
 
 /// Central state manager orchestrating the multi-module security scan.
 class SecurityProvider extends ChangeNotifier {
@@ -19,6 +21,7 @@ class SecurityProvider extends ChangeNotifier {
   final DeviceHealthService _deviceHealthService = DeviceHealthService();
   final DatabaseService _databaseService = DatabaseService();
   final PreferencesService _preferencesService = PreferencesService();
+  final NotificationService _notificationService = NotificationService();
 
   // --- State ---
   int _securityScore = 100;
@@ -61,6 +64,49 @@ class SecurityProvider extends ChangeNotifier {
     await loadDeviceInfo();
     await loadHistory();
     await loadActivityLogs();
+    
+    // Initialize Local Notifications
+    await _notificationService.init();
+    await _notificationService.requestPermission();
+    
+    // Setup Real-time Malware Installation Listener
+    _setupRealtimeListener();
+  }
+
+  void _setupRealtimeListener() {
+    DeviceApps.listenToAppsChanges().listen((ApplicationEvent event) async {
+      if (event.event == ApplicationEventType.installed && _realtimeProtection) {
+        // Fetch app WITH permissions for accurate threat analysis
+        final appInfo = await _appScanner.fetchAppWithPermissions(event.packageName);
+        if (appInfo != null) {
+          final threat = _threatAnalyzer.analyzeApp(appInfo);
+
+          if (threat != null && threat.riskLevel != 'LOW') {
+            // Add to threats list
+            _threats.add(threat);
+
+            await _logActivity(
+              'Real-Time Detection: ${threat.appName} flagged as ${threat.riskLevel} risk! Reason: ${threat.reasons.first}',
+              ActivityType.threat,
+            );
+
+            // Show high-priority notification
+            await _notificationService.showWarningNotification(
+              id: threat.appName.hashCode,
+              title: '⚠️ Threat Detected: ${threat.appName}',
+              body: '${threat.riskLevel} risk app installed. ${threat.reasons.first}. Tap to view details.',
+            );
+          } else {
+            await _logActivity(
+              'Real-Time Scanner: ${appInfo.appName} installed (Safe)',
+              ActivityType.protection,
+            );
+          }
+          notifyListeners();
+          await loadActivityLogs();
+        }
+      }
+    });
   }
 
   /// Runs a full smart security scan with staged timing for UX.
@@ -75,28 +121,23 @@ class SecurityProvider extends ChangeNotifier {
       _scanStage = 'Scanning installed apps...';
       notifyListeners();
       await Future.delayed(const Duration(milliseconds: 800));
-      
-      final rawApps = await _appScanner.fetchRawInstalledApps();
 
-      // 2. Analyze permissions
-      _scanStage = 'Analyzing permissions...';
+      // 2. Fetch apps WITH real permissions for accurate analysis
+      _scanStage = 'Analyzing app permissions...';
       notifyListeners();
       await Future.delayed(const Duration(milliseconds: 800));
 
-      // 3. Suspicious packages analysis
-      _scanStage = 'Detecting suspicious packages...';
+      final List<AppInfo> apps = await _appScanner.fetchAllAppsWithPermissions();
+
+      // 3. Suspicious packages analysis + threat detection
+      _scanStage = 'Detecting malware & suspicious packages...';
       notifyListeners();
       await Future.delayed(const Duration(milliseconds: 800));
 
       int dangerousCount = 0;
-      List<AppInfo> apps = [];
       List<Threat> detectedThreats = [];
 
-      for (var rawApp in rawApps) {
-        AppInfo appInfo = _appScanner.mapToAppInfo(rawApp);
-        apps.add(appInfo);
-
-        // Analyze app for all threats (includes fake app, keyword, permissions)
+      for (var appInfo in apps) {
         Threat? threat = _threatAnalyzer.analyzeApp(appInfo);
         if (threat != null) {
           detectedThreats.add(threat);
