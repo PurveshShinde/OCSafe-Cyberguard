@@ -3,16 +3,16 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 
 class ApkScanner {
-  /// Scans common download directories for APK files.
-  /// Returns a list of paths to found APKs.
-  Future<List<String>> scanForApks() async {
-    List<String> foundApks = [];
+  /// Scans common download directories for APK and ZIP files.
+  /// Returns a list of paths to found suspicious files.
+  Future<List<String>> scanForSuspiciousFiles() async {
+    List<String> foundFiles = [];
 
     // Request permissions based on Android version
     bool canReadStorage = await _requestStoragePermission();
     if (!canReadStorage) {
       // Cannot scan without permission
-      return foundApks;
+      return foundFiles;
     }
 
     final List<String> directoriesToScan = [
@@ -28,8 +28,8 @@ class ApkScanner {
           for (var entity in entities) {
             if (entity is File) {
               final path = entity.path.toLowerCase();
-              if (path.endsWith('.apk') || path.endsWith('.xapk') || path.endsWith('.apks')) {
-                foundApks.add(entity.path);
+              if (path.endsWith('.apk') || path.endsWith('.xapk') || path.endsWith('.apks') || path.endsWith('.zip') || path.endsWith('.rar')) {
+                foundFiles.add(entity.path);
               }
             }
           }
@@ -39,7 +39,7 @@ class ApkScanner {
       }
     }
 
-    return foundApks;
+    return foundFiles;
   }
 
   Future<bool> _requestStoragePermission() async {

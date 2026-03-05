@@ -11,6 +11,7 @@ class ThreatAnalyzer {
     'record', 'inject', 'exploit', 'malware', 'virus', 'trojan', 'worm',
     'rootkit', 'rat', 'backdoor', 'phish', 'scam', 'spoof', 'crack',
     'bypass', 'cheat', 'prank', 'fake', 'cloneapp', 'mirror',
+    'adware', 'clicker', 'adserving', 'popups',
   ];
 
   // --- Known malware / AV-test package names ---
@@ -65,6 +66,11 @@ class ThreatAnalyzer {
     'com.android.google.service',
     'com.android.system.update.manager',
     'com.system.service.helper',
+
+    // Known Adware / Clickers
+    'com.mub.zqavw', // User reported stealth adware
+    'com.adware.clicker',
+    'com.mobile.adserving',
   ];
 
   // --- Known legitimate whitelisted apps (to avoid false positives) ---
@@ -206,6 +212,32 @@ class ThreatAnalyzer {
       recommendation = 'Fake app detected. Immediate uninstall strongly recommended.';
     }
 
+    // 5.2 Adware Behavioral Detection (Overlays + Internet + AutoStart on untrusted apps)
+    bool isAdwareKeyword = packageLower.contains('adware') || packageLower.contains('clicker') || app.appName.toLowerCase().contains('adware');
+    bool hasAdwareBehavior = app.requestedPermissions.contains('android.permission.SYSTEM_ALERT_WINDOW') && 
+                             app.requestedPermissions.contains('android.permission.INTERNET') &&
+                             app.requestedPermissions.contains('android.permission.RECEIVE_BOOT_COMPLETED');
+                             
+    bool isTrustedNamespaceAdwareCheck = app.packageName.startsWith('com.android.') ||
+                              app.packageName.startsWith('com.google.') ||
+                              app.packageName.startsWith('com.samsung.') ||
+                              app.packageName.startsWith('com.oneplus.') ||
+                              app.packageName.startsWith('com.oplus.') ||
+                              app.packageName.startsWith('com.coloros.') ||
+                              app.packageName.startsWith('com.xiaomi.') ||
+                              app.packageName.startsWith('com.huawei.') ||
+                              app.packageName.startsWith('com.heytap.');
+
+    if (!app.isSystemApp && !isTrustedNamespaceAdwareCheck && !popularAppsWhitelist.values.contains(app.packageName)) {
+        if (isAdwareKeyword || hasAdwareBehavior) {
+            reasons.add('Adware Characteristics: App behavior strongly suggests intrusive advertising or click-fraud.');
+            totalScore += 60;
+            if (recommendation.contains('Review app usage')) {
+                recommendation = 'Adware detected. This app may drain battery and display intrusive advertisements over other apps. Uninstall recommended.';
+            }
+        }
+    }
+
     // 5.5 Hidden App Detection (No Launcher Icon + Suspicious Permissions)
     // Check allowlist AND common trusted namespaces (Google, OEMs, Android System)
     bool isTrustedNamespace = app.packageName.startsWith('com.android.') ||
@@ -290,14 +322,15 @@ class ThreatAnalyzer {
     return null;
   }
 
-  /// Evaluates APK files found in storage — always HIGH risk (sideloaded unverified installer).
-  List<Threat> evaluateApks(List<String> apkPaths) {
-    return apkPaths.map((path) {
+  /// Evaluates files found in storage. APKs are HIGH risk, ZIPs are MEDIUM risk unless they have malware names.
+  List<Threat> evaluateSuspiciousFiles(List<String> filePaths) {
+    return filePaths.map((path) {
       final fileName = path.split('/').last;
       final lowerName = fileName.toLowerCase();
+      final isZip = lowerName.endsWith('.zip') || lowerName.endsWith('.rar');
 
-      // Check if APK name itself contains a known AV-test or malware pattern
-      bool isMalwareApk = lowerName.contains('avtest') ||
+      // Check if file name itself contains a known AV-test or malware pattern
+      bool isMalwareName = lowerName.contains('avtest') ||
           lowerName.contains('av_test') ||
           lowerName.contains('eicar') ||
           lowerName.contains('malware') ||
@@ -306,20 +339,22 @@ class ThreatAnalyzer {
 
       return Threat(
         appName: fileName,
-        packageName: 'Unverified APK Installer',
-        riskLevel: isMalwareApk ? 'HIGH' : 'HIGH',
-        threatScore: isMalwareApk ? 90 : 60,
-        reasons: isMalwareApk
+        packageName: path, // Store the absolute path here so we can delete the file
+        riskLevel: isMalwareName ? 'HIGH' : (isZip ? 'MEDIUM' : 'HIGH'),
+        threatScore: isMalwareName ? 90 : (isZip ? 50 : 60),
+        reasons: isMalwareName
             ? [
-                'APK file with malware-related name detected in storage',
-                'Sideloaded APK installer — bypasses Play Store verification',
+                'File with malware-related name detected in storage',
+                isZip ? 'Archives can contain malicious payloads' : 'Sideloaded APK installer — bypasses Play Store verification',
               ]
             : [
-                'Sideloaded APK installer detected — bypasses Play Store security verification',
-                'Unverified apps can contain hidden malware',
+                isZip ? 'Compressed archive detected' : 'Sideloaded APK installer detected — bypasses Play Store security verification',
+                isZip ? 'Archives downloaded from the internet may contain hidden malware' : 'Unverified apps can contain hidden malware',
               ],
         permissionsRequested: [],
-        recommendedAction: 'Delete this APK unless you explicitly downloaded it from a trusted source.',
+        recommendedAction: isZip 
+            ? 'Delete this archive file unless you explicitly downloaded it and trust its source.' 
+            : 'Delete this APK unless you explicitly downloaded it from a trusted source.',
       );
     }).toList();
   }

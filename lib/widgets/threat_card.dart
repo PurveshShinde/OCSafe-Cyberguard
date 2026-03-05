@@ -1,7 +1,10 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:ocsafe_cyberguard/core/theme/app_theme.dart';
 import 'package:ocsafe_cyberguard/models/threat.dart';
 import 'package:ocsafe_cyberguard/services/uninstall_service.dart';
+import 'package:ocsafe_cyberguard/providers/security_provider.dart';
 
 class ThreatCard extends StatelessWidget {
   final Threat threat;
@@ -23,29 +26,50 @@ class ThreatCard extends StatelessWidget {
     }
 
     return Card(
-      color: AppColors.surface,
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: severityColor.withValues(alpha: 0.05),
+      margin: const EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: severityColor.withValues(alpha: 0.3), width: 1),
+      ),
       elevation: 0,
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          tilePadding: const EdgeInsets.all(12),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           leading: Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: severityColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
+              color: severityColor.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
             ),
-            child: Icon(Icons.warning_amber_rounded, color: severityColor, size: 24),
+            child: Icon(
+              threat.riskLevel == 'HIGH' ? Icons.gpp_bad_rounded : Icons.warning_amber_rounded,
+              color: severityColor,
+              size: 28,
+            ),
           ),
           title: Text(
             threat.appName,
-            style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: AppColors.textPrimary),
           ),
-          subtitle: Text(
-            'Risk Level: ${threat.riskLevel}',
-            style: TextStyle(color: severityColor, fontWeight: FontWeight.w600, fontSize: 12),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4.0),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: severityColor.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    '${threat.riskLevel} RISK',
+                    style: TextStyle(color: severityColor, fontWeight: FontWeight.w900, fontSize: 10, letterSpacing: 0.5),
+                  ),
+                ),
+              ],
+            ),
           ),
           childrenPadding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
           expandedCrossAxisAlignment: CrossAxisAlignment.start,
@@ -97,14 +121,16 @@ class ThreatCard extends StatelessWidget {
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
+              height: 48,
               child: ElevatedButton.icon(
                 onPressed: () => _handleUninstall(context),
-                icon: const Icon(Icons.delete_forever, color: Colors.white),
-                label: const Text('UNINSTALL APP', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                icon: const Icon(Icons.delete_forever, color: Colors.white, size: 22),
+                label: const Text('UNINSTALL THREAT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, letterSpacing: 1.2)),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.error,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  backgroundColor: severityColor,
+                  foregroundColor: Colors.white,
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
             )
@@ -116,7 +142,27 @@ class ThreatCard extends StatelessWidget {
 
   void _handleUninstall(BuildContext context) async {
       try {
-        await UninstallService.uninstallApp(threat.packageName);
+        if (threat.packageName.startsWith('/storage/') || threat.packageName.toLowerCase().endsWith('.apk')) {
+          final file = File(threat.packageName);
+          if (await file.exists()) {
+             await file.delete();
+             if (!context.mounted) return;
+             Provider.of<SecurityProvider>(context, listen: false).removeApkThreat(threat);
+             ScaffoldMessenger.of(context).showSnackBar(
+               const SnackBar(content: Text('APK file deleted successfully.'), backgroundColor: Colors.green),
+             );
+          } else {
+             if (!context.mounted) return;
+             ScaffoldMessenger.of(context).showSnackBar(
+               const SnackBar(content: Text('Failed to delete: File not found.'), backgroundColor: AppColors.error),
+             );
+          }
+        } else {
+          await UninstallService.uninstallApp(threat.packageName);
+          // Optimistically remove from UI for a snappier experience while Android processes the uninstall.
+          if (!context.mounted) return;
+          Provider.of<SecurityProvider>(context, listen: false).removeAppThreat(threat.packageName);
+        }
       } catch (e) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(

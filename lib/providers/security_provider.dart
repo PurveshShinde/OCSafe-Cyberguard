@@ -140,6 +140,26 @@ class SecurityProvider extends ChangeNotifier {
     _securityScore = score.clamp(0, 100);
   }
 
+  void removeApkThreat(Threat threat) async {
+    _threats.removeWhere((t) => t.packageName == threat.packageName);
+    _updateScore();
+    await _logActivity(
+      'Threat Removed: ${threat.appName} was deleted from storage.',
+      ActivityType.protection,
+    );
+    notifyListeners();
+    await loadActivityLogs();
+  }
+
+  void removeAppThreat(String packageName) async {
+    final initialLength = _threats.length;
+    _threats.removeWhere((t) => t.packageName == packageName);
+    if (_threats.length < initialLength) {
+       _updateScore();
+       notifyListeners();
+    }
+  }
+
   /// Runs a full smart security scan with staged timing for UX.
   Future<void> runScan() async {
     if (_isScanning) return; // prevent multiple scans
@@ -177,14 +197,14 @@ class SecurityProvider extends ChangeNotifier {
         }
       }
 
-      // 4. Scan for APK installers
-      _scanStage = 'Scanning APK files...';
+      // 4. Scan for suspicious files in storage (APKs, ZIPs)
+      _scanStage = 'Scanning storage for suspicious files...';
       notifyListeners();
       await Future.delayed(const Duration(milliseconds: 800));
       
-      final apkPaths = await _apkScanner.scanForApks();
-      final apkThreats = _threatAnalyzer.evaluateApks(apkPaths);
-      detectedThreats.addAll(apkThreats);
+      final filePaths = await _apkScanner.scanForSuspiciousFiles();
+      final fileThreats = _threatAnalyzer.evaluateSuspiciousFiles(filePaths);
+      detectedThreats.addAll(fileThreats);
 
       // 5. Calculate threats & generate report
       _scanStage = 'Calculating threats & generating report...';
