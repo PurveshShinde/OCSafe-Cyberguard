@@ -62,6 +62,42 @@ class ScanScreen extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                // Scan mode indicator chip
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: provider.isFullScan
+                        ? AppColors.primary.withValues(alpha: 0.15)
+                        : AppColors.warning.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: provider.isFullScan ? AppColors.primary : AppColors.warning,
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        provider.isFullScan ? Icons.security : Icons.info_outline,
+                        size: 16,
+                        color: provider.isFullScan ? AppColors.primary : AppColors.warning,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        provider.isFullScan
+                            ? 'Full Scan Enabled'
+                            : 'Limited Scan (Storage permission not granted)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: provider.isFullScan ? AppColors.primary : AppColors.warning,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 32),
                 Stack(
                   alignment: Alignment.center,
                   children: [

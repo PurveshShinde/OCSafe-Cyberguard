@@ -84,6 +84,24 @@ class ReportDetailScreen extends StatelessWidget {
                             Text('${result.threatCount} threats found', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
                           ],
                         ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: result.isFullScan
+                                ? AppColors.primary.withValues(alpha: 0.1)
+                                : AppColors.warning.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            result.isFullScan ? 'Full Scan' : 'Limited Scan',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: result.isFullScan ? AppColors.primary : AppColors.warning,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),

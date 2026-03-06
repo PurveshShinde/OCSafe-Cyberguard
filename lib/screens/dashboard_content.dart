@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:ocsafe_cyberguard/core/theme/app_theme.dart';
 import 'package:ocsafe_cyberguard/providers/security_provider.dart';
+import 'package:ocsafe_cyberguard/services/apk_scanner.dart';
 import 'package:ocsafe_cyberguard/widgets/simple_card.dart';
 import 'package:ocsafe_cyberguard/widgets/primary_button.dart';
 import 'package:ocsafe_cyberguard/screens/scan_screen.dart';
@@ -9,6 +11,8 @@ import 'package:ocsafe_cyberguard/screens/permissions_screen.dart';
 import 'package:ocsafe_cyberguard/screens/optimization_screen.dart';
 import 'package:ocsafe_cyberguard/models/activity_log.dart';
 import 'package:intl/intl.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+
 
 /// Main dashboard content shown on the Home tab.
 class DashboardContent extends StatelessWidget {
@@ -112,19 +116,128 @@ class DashboardContent extends StatelessWidget {
       text: provider.isScanning ? 'Scanning...' : 'Run Smart Scan',
       icon: Icons.radar,
       isLoading: provider.isScanning,
-      onPressed: () {
-        if (!provider.isScanning) {
-          provider.runScan(); // do not await here
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const ScanScreen(),
-            ),
-          );
-        }
+      onPressed: () async {
+        if (provider.isScanning) return;
+        await _startScanWithPermission(context, provider);
       },
     );
   }
+
+  /// Handles storage permission check before launching the scan.
+  /// All permission logic lives here — scanForSuspiciousFiles() only checks, never requests.
+  Future<void> _startScanWithPermission(
+    BuildContext context,
+    SecurityProvider provider,
+  ) async {
+    final scanner = ApkScanner();
+    bool granted = false;
+
+    if (Platform.isAndroid) {
+      granted = await scanner.hasStoragePermission();
+
+      if (!granted) {
+        if (!context.mounted) return;
+        final androidInfo = await DeviceInfoPlugin().androidInfo;
+        final int sdk = androidInfo.version.sdkInt;
+
+        if (!context.mounted) return;
+
+        // Show explanation dialog with user-specified wording
+        final bool? userChoice = await showDialog<bool>(
+              context: context,
+              barrierDismissible: false,
+              builder: (ctx) => AlertDialog(
+                backgroundColor: AppColors.surface,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                icon: const Icon(Icons.folder_open, color: AppColors.primary, size: 40),
+                title: const Text(
+                  'Storage Permission Required',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                content: const Text(
+                  'CyberGuard needs access to device storage to scan APK files, '
+                  'archives, and suspicious files across your device.\n\n'
+                  'Without this permission, the scan will only check installed applications.',
+                  style: TextStyle(color: AppColors.textSecondary, height: 1.5),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Continue with Limited Scan',
+                        style: TextStyle(color: AppColors.textSecondary)),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text(
+                      'Allow Full Scan',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            );
+
+        if (!context.mounted) return;
+
+        if (userChoice == true) {
+          // Fire the permission intent / dialog
+          await scanner.requestStoragePermission();
+
+          // Poll for up to 30 seconds for the user to toggle & return
+          if (sdk >= 30) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Grant "All Files Access" in Settings, then return to the app...'),
+                  duration: Duration(seconds: 30),
+                  backgroundColor: AppColors.warning,
+                ),
+              );
+            }
+            for (int i = 0; i < 60; i++) {
+              await Future.delayed(const Duration(milliseconds: 500));
+              granted = await scanner.hasStoragePermission();
+              if (granted) break;
+            }
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).clearSnackBars();
+            }
+          } else {
+            granted = await scanner.hasStoragePermission();
+          }
+
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(granted
+                    ? '✅ Storage access granted — starting full scan.'
+                    : '⚠️ Storage permission not granted. Running limited scan.'),
+                duration: const Duration(seconds: 3),
+                backgroundColor: granted ? AppColors.primary : AppColors.warning,
+              ),
+            );
+          }
+        }
+        // If user chose "Continue with Limited Scan" or dismissed, granted stays false
+      }
+    }
+
+    if (!context.mounted) return;
+
+    // Set scan mode based on permission status
+    provider.setFullScan(granted);
+    provider.runScan();
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ScanScreen()),
+    );
+  }
+
 
   /// Quick action cards grid.
   Widget _buildQuickActions(BuildContext context, SecurityProvider provider) {

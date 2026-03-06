@@ -8,6 +8,8 @@ class ScanResult {
   final int threatCount;
   final int securityScore;
   final List<Threat> threats;
+  /// 'full' = scanned installed apps + device storage; 'limited' = installed apps only.
+  final String scanMode;
 
   const ScanResult({
     this.id,
@@ -16,7 +18,10 @@ class ScanResult {
     required this.threatCount,
     required this.securityScore,
     this.threats = const [],
+    this.scanMode = 'limited',
   });
+
+  bool get isFullScan => scanMode == 'full';
 
   Map<String, dynamic> toMap() {
     return {
@@ -25,6 +30,7 @@ class ScanResult {
       'total_apps_scanned': totalAppsScanned,
       'threat_count': threatCount,
       'security_score': securityScore,
+      'scan_mode': scanMode,
     };
   }
 
@@ -36,6 +42,7 @@ class ScanResult {
       threatCount: map['threat_count'] as int,
       securityScore: map['security_score'] as int,
       threats: threats,
+      scanMode: (map['scan_mode'] as String?) ?? 'limited',
     );
   }
 }

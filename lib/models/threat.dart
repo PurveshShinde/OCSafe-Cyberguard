@@ -9,6 +9,8 @@ class Threat {
   final List<String> reasons;
   final List<String> permissionsRequested;
   final String recommendedAction;
+  /// 'app' = installed application, 'file' = APK/archive found on device storage
+  final String threatType;
 
   const Threat({
     this.id,
@@ -20,6 +22,7 @@ class Threat {
     required this.reasons,
     required this.permissionsRequested,
     required this.recommendedAction,
+    this.threatType = 'app',
   });
 
   Map<String, dynamic> toMap() {
@@ -33,6 +36,7 @@ class Threat {
       'reasons': reasons.join('|'), // Delimited string for simple SQLite storage
       'permissions': permissionsRequested.join('|'),
       'recommendation': recommendedAction,
+      'threat_type': threatType,
     };
   }
 
@@ -47,6 +51,7 @@ class Threat {
       reasons: (map['reasons'] as String).isEmpty ? [] : (map['reasons'] as String).split('|'),
       permissionsRequested: (map['permissions'] as String).isEmpty ? [] : (map['permissions'] as String).split('|'),
       recommendedAction: map['recommendation'] as String,
+      threatType: (map['threat_type'] as String?) ?? 'app',
     );
   }
 }

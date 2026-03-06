@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+
 import 'package:flutter/services.dart';
 import 'package:ocsafe_cyberguard/models/threat.dart';
 import 'package:ocsafe_cyberguard/models/scan_result.dart';
@@ -13,6 +13,7 @@ import 'package:ocsafe_cyberguard/services/device_health_service.dart';
 import 'package:ocsafe_cyberguard/services/database_service.dart';
 import 'package:ocsafe_cyberguard/services/preferences_service.dart';
 import 'package:ocsafe_cyberguard/services/notification_service.dart';
+import 'package:ocsafe_cyberguard/services/safe_browsing_service.dart';
 import 'package:device_apps/device_apps.dart';
 
 /// Central state manager orchestrating the multi-module security scan.
@@ -24,11 +25,13 @@ class SecurityProvider extends ChangeNotifier {
   final DatabaseService _databaseService = DatabaseService();
   final PreferencesService _preferencesService = PreferencesService();
   final NotificationService _notificationService = NotificationService();
+  final SafeBrowsingService _safeBrowsingService = SafeBrowsingService();
 
   // --- State ---
   int _securityScore = 100;
   bool _isScanning = false;
   String _scanStage = '';
+  bool _isFullScan = false;
   
   ScanResult? _lastScanResult;
   List<Threat> _threats = [];
@@ -48,6 +51,7 @@ class SecurityProvider extends ChangeNotifier {
   int get securityScore => _securityScore;
   bool get isScanning => _isScanning;
   String get scanStage => _scanStage;
+  bool get isFullScan => _isFullScan;
   ScanResult? get lastScanResult => _lastScanResult;
   List<Threat> get threats => _threats;
   List<ActivityLog> get activityLogs => _activityLogs;
@@ -160,7 +164,15 @@ class SecurityProvider extends ChangeNotifier {
     }
   }
 
-  /// Runs a full smart security scan with staged timing for UX.
+  /// Sets whether the next scan should be a full device scan or limited scan.
+  void setFullScan(bool value) {
+    _isFullScan = value;
+    notifyListeners();
+  }
+
+  /// Runs a smart security scan with staged timing for UX.
+  /// If [_isFullScan] is true, scans both installed apps and device storage.
+  /// If false, scans installed apps only (Limited Scan).
   Future<void> runScan() async {
     if (_isScanning) return; // prevent multiple scans
     
@@ -181,37 +193,49 @@ class SecurityProvider extends ChangeNotifier {
       final RootIsolateToken token = RootIsolateToken.instance!;
       final List<AppInfo> apps = await compute(fetchAllAppsBackground, token);
 
+
       // 3. Suspicious packages analysis + threat detection
       _scanStage = 'Detecting malware & suspicious packages...';
       notifyListeners();
       await Future.delayed(const Duration(milliseconds: 800));
 
-      int dangerousCount = 0;
       List<Threat> detectedThreats = [];
 
       for (var appInfo in apps) {
         Threat? threat = _threatAnalyzer.analyzeApp(appInfo);
         if (threat != null) {
           detectedThreats.add(threat);
-          if (threat.permissionsRequested.isNotEmpty) dangerousCount++;
         }
       }
 
-      // 4. Scan for suspicious files in storage (APKs, ZIPs)
-      _scanStage = 'Scanning storage for suspicious files...';
-      notifyListeners();
-      await Future.delayed(const Duration(milliseconds: 800));
-      
-      final filePaths = await _apkScanner.scanForSuspiciousFiles();
-      final fileThreats = _threatAnalyzer.evaluateSuspiciousFiles(filePaths);
-      detectedThreats.addAll(fileThreats);
+      // 4. Scan for suspicious files across entire device storage (APKs, ZIPs, DEX, etc.)
+      //    Only runs in Full Scan mode (when storage permission is granted).
+      List<String> filePaths = [];
+      if (_isFullScan) {
+        _scanStage = 'Scanning whole device storage for malicious files...';
+        notifyListeners();
+        await Future.delayed(const Duration(milliseconds: 800));
+        
+        filePaths = await _apkScanner.scanForSuspiciousFiles();
+        final fileThreats = _threatAnalyzer.evaluateSuspiciousFiles(filePaths);
+        detectedThreats.addAll(fileThreats);
+      } else {
+        _scanStage = 'Limited scan — skipping storage (no permission)...';
+        notifyListeners();
+        await Future.delayed(const Duration(milliseconds: 600));
+      }
 
-      // 5. Calculate threats & generate report
+      // 5. Deduplicate & calculate threats & generate report
+      // On Android, /sdcard and /storage/emulated/0 are symlinked — same files
+      // may be found twice. Deduplicate by packageName (file path for file threats).
       _scanStage = 'Calculating threats & generating report...';
       notifyListeners();
       await Future.delayed(const Duration(milliseconds: 800));
 
-      _threats = detectedThreats;
+      final seen = <String>{};
+      final uniqueThreats = detectedThreats.where((t) => seen.add(t.packageName)).toList();
+
+      _threats = uniqueThreats;
       _updateScore();
 
       // Create scan result
@@ -221,14 +245,16 @@ class SecurityProvider extends ChangeNotifier {
         threatCount: _threats.length,
         securityScore: _securityScore,
         threats: _threats,
+        scanMode: _isFullScan ? 'full' : 'limited',
       );
 
       // Persist to database
       await _databaseService.insertScanResult(_lastScanResult!);
 
       // Log completion
+      final modeLabel = _isFullScan ? 'Full Scan' : 'Limited Scan';
       await _logActivity(
-        'Scan completed: ${apps.length} apps scanned, ${_threats.length} threats found',
+        '$modeLabel completed: ${apps.length} apps scanned, ${filePaths.length} files checked, ${_threats.length} threats found',
         ActivityType.scan,
       );
 
@@ -258,7 +284,33 @@ class SecurityProvider extends ChangeNotifier {
   Future<void> toggleSafeBrowsing(bool value) async {
     _safeBrowsing = value;
     await _preferencesService.setSafeBrowsing(value);
+    
+    if (value) {
+      await _logActivity('Safe Browsing protection enabled', ActivityType.protection);
+    } else {
+      await _logActivity('Safe Browsing protection disabled', ActivityType.protection);
+    }
     notifyListeners();
+  }
+
+  /// Checks a URL for threats and notifies the user if detected.
+  /// This can be called from an AccessibilityService or via clipboard monitoring.
+  Future<void> checkUrlForThreats(String url) async {
+    if (!_safeBrowsing) return;
+
+    final threat = await _safeBrowsingService.checkUrl(url);
+    if (threat != null) {
+      await _logActivity(
+        'Safe Browsing: Blocked ${threat.threatType} site: ${threat.domain}',
+        ActivityType.threat,
+      );
+
+      await _notificationService.showSafeBrowsingNotification(
+        id: url.hashCode,
+        title: '🛑 Malicious Site Detected!',
+        body: 'Alert: ${threat.domain} is flagged as ${threat.threatType}. Avoid sharing any data.',
+      );
+    }
   }
 
   /// Toggles auto scan on/off.

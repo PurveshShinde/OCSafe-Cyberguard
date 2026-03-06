@@ -108,6 +108,15 @@ class ReportsScreen extends StatelessWidget {
                   '${result.totalAppsScanned} apps · ${result.threatCount} threat${result.threatCount != 1 ? 's' : ''}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
+                const SizedBox(height: 4),
+                Text(
+                  result.isFullScan ? 'Full Scan' : 'Limited Scan',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: result.isFullScan ? AppColors.primary : AppColors.warning,
+                  ),
+                ),
               ],
             ),
           ),

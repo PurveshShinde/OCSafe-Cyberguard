@@ -68,6 +68,19 @@ class ThreatCard extends StatelessWidget {
                     style: TextStyle(color: severityColor, fontWeight: FontWeight.w900, fontSize: 10, letterSpacing: 0.5),
                   ),
                 ),
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceLight,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: AppColors.divider),
+                  ),
+                  child: Text(
+                    threat.threatType == 'file' ? 'APK File' : 'Installed App',
+                    style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600, fontSize: 10),
+                  ),
+                ),
               ],
             ),
           ),
@@ -124,8 +137,15 @@ class ThreatCard extends StatelessWidget {
               height: 48,
               child: ElevatedButton.icon(
                 onPressed: () => _handleUninstall(context),
-                icon: const Icon(Icons.delete_forever, color: Colors.white, size: 22),
-                label: const Text('UNINSTALL THREAT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, letterSpacing: 1.2)),
+                icon: Icon(
+                  threat.threatType == 'file' ? Icons.delete_forever : Icons.delete_forever,
+                  color: Colors.white,
+                  size: 22,
+                ),
+                label: Text(
+                  threat.threatType == 'file' ? 'DELETE FILE' : 'UNINSTALL APP',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, letterSpacing: 1.2),
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: severityColor,
                   foregroundColor: Colors.white,

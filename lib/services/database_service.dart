@@ -20,7 +20,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE scan_results (
@@ -28,7 +28,8 @@ class DatabaseService {
             scan_date TEXT NOT NULL,
             total_apps_scanned INTEGER NOT NULL,
             threat_count INTEGER NOT NULL,
-            security_score INTEGER NOT NULL
+            security_score INTEGER NOT NULL,
+            scan_mode TEXT NOT NULL DEFAULT 'limited'
           )
         ''');
 
@@ -43,6 +44,7 @@ class DatabaseService {
             reasons TEXT NOT NULL,
             permissions TEXT NOT NULL,
             recommendation TEXT NOT NULL,
+            threat_type TEXT NOT NULL DEFAULT 'app',
             FOREIGN KEY (scan_id) REFERENCES scan_results (id) ON DELETE CASCADE
           )
         ''');
@@ -55,6 +57,14 @@ class DatabaseService {
             timestamp TEXT NOT NULL
           )
         ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          // Add missing threat_type column (root cause of reports not saving)
+          await db.execute("ALTER TABLE threats ADD COLUMN threat_type TEXT NOT NULL DEFAULT 'app'");
+          // Add scan_mode column for Full/Limited scan tracking
+          await db.execute("ALTER TABLE scan_results ADD COLUMN scan_mode TEXT NOT NULL DEFAULT 'limited'");
+        }
       },
     );
   }

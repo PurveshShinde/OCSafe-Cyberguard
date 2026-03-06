@@ -1,6 +1,10 @@
+import 'dart:io';
+import 'package:archive/archive.dart';
+import 'package:flutter/foundation.dart';
 import 'package:ocsafe_cyberguard/models/app_info.dart';
 import 'package:ocsafe_cyberguard/models/threat.dart';
 import 'package:ocsafe_cyberguard/services/permission_scanner.dart';
+
 
 class ThreatAnalyzer {
   final PermissionScanner _permissionScanner = PermissionScanner();
@@ -130,8 +134,16 @@ class ThreatAnalyzer {
   ];
 
   /// Main method for analyzing an app on the fly.
+  /// Analyzes ALL apps including system apps (for known malware blocklist).
   Threat? analyzeApp(AppInfo app) {
-    if (app.isSystemApp) return null;
+    // For system apps only run the known malware blocklist check — skip heuristics.
+    // Non-system apps go through the full analysis pipeline.
+    final bool runFullAnalysis = !app.isSystemApp;
+
+    // Normalize app name: if empty, use package name as display name
+    final String displayName = (app.appName.trim().isEmpty)
+        ? app.packageName
+        : app.appName;
 
     List<String> reasons = [];
     int totalScore = 0;
@@ -152,7 +164,7 @@ class ThreatAnalyzer {
       recommendation = 'DANGEROUS: Known malware detected! Uninstall immediately.';
       // Return early — no need for further checks
       return Threat(
-        appName: app.appName,
+        appName: displayName,
         packageName: app.packageName,
         riskLevel: riskLevel,
         threatScore: totalScore,
@@ -161,6 +173,9 @@ class ThreatAnalyzer {
         recommendedAction: recommendation,
       );
     }
+
+    // System apps pass only the blocklist check above; skip heuristics.
+    if (!runFullAnalysis) return null;
 
     // 2. Check package name contains AV-test or malware-related patterns
     bool isAvTestApp = packageLower.contains('avtest') ||
@@ -176,6 +191,15 @@ class ThreatAnalyzer {
       totalScore += 80;
       riskLevel = 'HIGH';
       recommendation = 'This is an antivirus test file. Treat as HIGH risk if not intentionally installed.';
+    }
+
+    // Check for apps with no visible name (icon-less / stealth installs)
+    if (app.appName.trim().isEmpty) {
+      reasons.add('App has no visible name — possible stealth or malicious install');
+      totalScore += 35;
+      if (recommendation.contains('Review app usage')) {
+        recommendation = 'App with no name detected. Likely a stealthily installed background app. Investigate.';
+      }
     }
 
     // 3. Check Permissions using PermissionScanner
@@ -238,52 +262,40 @@ class ThreatAnalyzer {
         }
     }
 
-    // 5.5 Hidden App Detection (No Launcher Icon + Suspicious Permissions)
-    // Check allowlist AND common trusted namespaces (Google, OEMs, Android System)
-    bool isTrustedNamespace = app.packageName.startsWith('com.android.') ||
-                              app.packageName.startsWith('com.google.') ||
-                              app.packageName.startsWith('com.samsung.') ||
-                              app.packageName.startsWith('com.oneplus.') ||
-                              app.packageName.startsWith('com.oplus.') ||
-                              app.packageName.startsWith('com.coloros.') ||
-                              app.packageName.startsWith('com.xiaomi.') ||
-                              app.packageName.startsWith('com.huawei.') ||
-                              app.packageName.startsWith('com.heytap.');
+    // 5.5 Hidden App Detection — runs for ALL non-system apps regardless of icon
+    // Apps without a launch intent (no launcher icon) are hidden from the user.
+    if (!app.hasLaunchIntent) {
+      if (!safeHiddenPackages.contains(app.packageName) && !isTrustedNamespaceAdwareCheck) {
+        int hiddenScoreValue = 20; // Base score for any hidden non-system app
 
-    if (!app.isSystemApp && 
-        !app.hasLaunchIntent && 
-        !safeHiddenPackages.contains(app.packageName) &&
-        !isTrustedNamespace) {
-      print("🕵️ Hidden app detected: ${app.packageName} (${app.appName})");
-      reasons.add('Hidden App: No launcher icon.');
-      int hiddenScore = 40;
+        if (app.requestedPermissions.contains('android.permission.RECEIVE_BOOT_COMPLETED')) {
+          hiddenScoreValue += 20;
+        }
+        if (app.requestedPermissions.contains('android.permission.BIND_ACCESSIBILITY_SERVICE')) {
+          hiddenScoreValue += 40;
+        }
+        if (app.requestedPermissions.contains('android.permission.FOREGROUND_SERVICE')) {
+          hiddenScoreValue += 20;
+        }
+        if (app.requestedPermissions.contains('android.permission.BIND_DEVICE_ADMIN')) {
+          hiddenScoreValue += 40; // Device admin = high danger
+        }
 
-      if (app.requestedPermissions.contains('android.permission.RECEIVE_BOOT_COMPLETED')) {
-        hiddenScore += 20;
-        reasons.add('Runs automatically on boot.');
-      }
-      if (app.requestedPermissions.contains('android.permission.BIND_ACCESSIBILITY_SERVICE')) {
-        hiddenScore += 40;
-        reasons.add('Uses accessibility service.');
-      }
-      if (app.requestedPermissions.contains('android.permission.SYSTEM_ALERT_WINDOW')) {
-        hiddenScore += 30;
-        reasons.add('Uses overlay attack permission.');
-      }
-      if (app.requestedPermissions.contains('android.permission.FOREGROUND_SERVICE')) {
-        hiddenScore += 20;
-        reasons.add('Runs in background (foreground service).');
-      }
-      if (app.requestedPermissions.contains('android.permission.INTERNET')) {
-        hiddenScore += 10;
-        reasons.add('Has network capability.');
-      }
+        // Trigger at score >= 20 (any hidden non-system, non-trusted app)
+        if (hiddenScoreValue >= 20) {
+          reasons.add(
+            hiddenScoreValue >= 60
+                ? 'Hidden app with high-level permissions — strong malware indicator.'
+                : 'Hidden background app detected (no launcher icon): possible stealth install.',
+          );
+          totalScore += hiddenScoreValue;
 
-      totalScore += hiddenScore;
-      if (recommendation == 'Review app usage or uninstall if unfamiliar.') {
-          recommendation = 'App hides from your app drawer and has suspicious permissions. This is a common tactic for stealth malware. Uninstall highly recommended.';
-      } else if (totalScore >= 70 && recommendation.contains('Review app usage')) {
-          recommendation = 'High risk: App is hidden and severely overly-privileged. Uninstall highly recommended.';
+          if (hiddenScoreValue >= 60) {
+            recommendation = 'High risk: This hidden app has elevated permissions. Uninstall recommended.';
+          } else if (recommendation.contains('Review app usage')) {
+            recommendation = 'Hidden app detected. Verify you intentionally installed this background service.';
+          }
+        }
       }
     }
 
@@ -309,7 +321,7 @@ class ThreatAnalyzer {
       }
 
       return Threat(
-        appName: app.appName,
+        appName: displayName,
         packageName: app.packageName,
         riskLevel: riskLevel,
         threatScore: totalScore,
@@ -322,40 +334,80 @@ class ThreatAnalyzer {
     return null;
   }
 
-  /// Evaluates files found in storage. APKs are HIGH risk, ZIPs are MEDIUM risk unless they have malware names.
+  /// Evaluates files found in storage. APKs are HIGH risk, ZIPs are only flagged if they have malware indicators in contents.
   List<Threat> evaluateSuspiciousFiles(List<String> filePaths) {
-    return filePaths.map((path) {
+    List<Threat> threats = [];
+    
+    for (final path in filePaths) {
       final fileName = path.split('/').last;
       final lowerName = fileName.toLowerCase();
       final isZip = lowerName.endsWith('.zip') || lowerName.endsWith('.rar');
+      final isApk = lowerName.endsWith('.apk');
 
-      // Check if file name itself contains a known AV-test or malware pattern
-      bool isMalwareName = lowerName.contains('avtest') ||
-          lowerName.contains('av_test') ||
-          lowerName.contains('eicar') ||
-          lowerName.contains('malware') ||
-          lowerName.contains('virus') ||
-          lowerName.contains('trojan');
+      if (isApk) {
+        // APK logic remains robust
+        bool isMalwareName = lowerName.contains('avtest') || lowerName.contains('eicar') || lowerName.contains('malware');
+        threats.add(Threat(
+          appName: fileName,
+          packageName: path,
+          riskLevel: 'HIGH',
+          threatScore: isMalwareName ? 90 : 60,
+          reasons: [
+            if (isMalwareName) 'File with malware-related name detected',
+            'Sideloaded APK installer detected — bypasses Play Store verification',
+          ],
+          permissionsRequested: [],
+          recommendedAction: 'Delete this APK unless you trust the source.',
+          threatType: 'file',
+        ));
+      } else if (isZip) {
+        // Refined Archive Inspection
+        final archiveIndicators = _inspectArchiveContents(path);
+        if (archiveIndicators.isNotEmpty) {
+          threats.add(Threat(
+            appName: fileName,
+            packageName: path,
+            riskLevel: 'HIGH',
+            threatScore: archiveIndicators.any((i) => i.contains('signature')) ? 100 : 70,
+            reasons: archiveIndicators,
+            permissionsRequested: [],
+            recommendedAction: 'Archive contains suspicious content. Immediate removal recommended.',
+            threatType: 'file',
+          ));
+        }
+      }
+    }
+    
+    return threats;
+  }
 
-      return Threat(
-        appName: fileName,
-        packageName: path, // Store the absolute path here so we can delete the file
-        riskLevel: isMalwareName ? 'HIGH' : (isZip ? 'MEDIUM' : 'HIGH'),
-        threatScore: isMalwareName ? 90 : (isZip ? 50 : 60),
-        reasons: isMalwareName
-            ? [
-                'File with malware-related name detected in storage',
-                isZip ? 'Archives can contain malicious payloads' : 'Sideloaded APK installer — bypasses Play Store verification',
-              ]
-            : [
-                isZip ? 'Compressed archive detected' : 'Sideloaded APK installer detected — bypasses Play Store security verification',
-                isZip ? 'Archives downloaded from the internet may contain hidden malware' : 'Unverified apps can contain hidden malware',
-              ],
-        permissionsRequested: [],
-        recommendedAction: isZip 
-            ? 'Delete this archive file unless you explicitly downloaded it and trust its source.' 
-            : 'Delete this APK unless you explicitly downloaded it from a trusted source.',
-      );
-    }).toList();
+  /// Inspects ZIP/RAR contents for malicious indicators.
+  List<String> _inspectArchiveContents(String filePath) {
+    List<String> indicators = [];
+    try {
+      final file = File(filePath);
+      if (!file.existsSync()) return [];
+
+      final bytes = file.readAsBytesSync();
+      final archive = ZipDecoder().decodeBytes(bytes);
+
+      for (final file in archive) {
+        final innerName = file.name.toLowerCase();
+        
+        if (innerName.endsWith('.apk') || innerName.endsWith('.exe') || innerName.endsWith('.dex')) {
+          indicators.add('Archive contains executable file: ${file.name}');
+        }
+        
+        if (innerName.contains('eicar')) {
+          indicators.add('Known malware test signature detected in archive.');
+        }
+
+        // Potential for deep string search in small text files could be added here
+      }
+    } catch (e) {
+      // If we can't extract (e.g. encrypted or wrong format), we don't flag as malware by default
+      debugPrint('Could not inspect archive $filePath: $e');
+    }
+    return indicators;
   }
 }

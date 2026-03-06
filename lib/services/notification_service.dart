@@ -61,4 +61,31 @@ class NotificationService {
       notificationDetails: platformChannelSpecifics,
     );
   }
+
+  Future<void> showSafeBrowsingNotification({
+    required int id,
+    required String title,
+    required String body,
+  }) async {
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+        AndroidNotificationDetails(
+      'safe_browsing_channel',
+      'Safe Browsing Alerts',
+      channelDescription: 'Alerts for malicious or phishing websites',
+      importance: Importance.high,
+      priority: Priority.high,
+      color: Color(0xFFFB8C00), // Orange color for warnings
+      ticker: 'ticker',
+      icon: '@mipmap/ic_launcher',
+    );
+    const NotificationDetails platformChannelSpecifics =
+        NotificationDetails(android: androidPlatformChannelSpecifics);
+    
+    await flutterLocalNotificationsPlugin.show(
+      id: id,
+      title: title,
+      body: body,
+      notificationDetails: platformChannelSpecifics,
+    );
+  }
 }
