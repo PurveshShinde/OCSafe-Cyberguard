@@ -15,21 +15,13 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
   final Map<Permission, PermissionStatus> _statuses = {};
 
   final List<Permission> _monitoredPermissions = [
-    Permission.camera,
-    Permission.microphone,
-    Permission.location,
-    Permission.storage,  // Often used dynamically on Android
-    Permission.contacts,
-    Permission.sms,
+    Permission.notification,
+    Permission.manageExternalStorage,
   ];
 
   final Map<Permission, String> _permissionNames = {
-    Permission.camera: 'Camera',
-    Permission.microphone: 'Microphone',
-    Permission.location: 'Location',
-    Permission.storage: 'Storage',
-    Permission.contacts: 'Contacts',
-    Permission.sms: 'SMS',
+    Permission.notification: 'Notifications',
+    Permission.manageExternalStorage: 'All Files Access',
   };
 
   @override
@@ -87,17 +79,11 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
 
     IconData icon;
     switch (name) {
-      case 'Camera':
-        icon = Icons.camera_alt;
+      case 'Notifications':
+        icon = Icons.notifications_active_outlined;
         break;
-      case 'Microphone':
-        icon = Icons.mic;
-        break;
-      case 'Location':
-        icon = Icons.location_on;
-        break;
-      case 'Storage':
-        icon = Icons.folder;
+      case 'All Files Access':
+        icon = Icons.folder_shared_outlined;
         break;
       default:
         icon = Icons.security;

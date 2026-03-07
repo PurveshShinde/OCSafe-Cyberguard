@@ -132,12 +132,6 @@ class DatabaseService {
     return maps.map((m) => ActivityLog.fromMap(m)).toList();
   }
 
-  /// Removes all threats associated with a specific package name from the database.
-  Future<void> removeThreatsByPackageName(String packageName) async {
-    final db = await database;
-    await db.delete('threats', where: 'package_name = ?', whereArgs: [packageName]);
-  }
-
   /// Clears all data (for testing/reset).
   Future<void> clearAll() async {
     final db = await database;

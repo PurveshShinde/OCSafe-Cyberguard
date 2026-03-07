@@ -3,53 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-
-@pragma('vm:entry-point')
-List<String> scanDirectoriesBackground(Map<String, dynamic> params) {
-  final List<String> dirsToScan = params['dirsToScan'];
-  final List<String> extensions = params['extensions'];
-  final int maxDepth = params['maxDepth'];
-  final List<String> foundFiles = [];
-
-  for (final dirPath in dirsToScan) {
-    _scanDirectoryBackgroundSync(dirPath, foundFiles, extensions, depth: 0, maxDepth: maxDepth);
-  }
-
-  return foundFiles;
-}
-
-void _scanDirectoryBackgroundSync(
-  String dirPath,
-  List<String> foundFiles,
-  List<String> extensions, {
-  required int depth,
-  required int maxDepth,
-}) {
-  if (depth > maxDepth) return;
-
-  final dir = Directory(dirPath);
-  if (!dir.existsSync()) return;
-
-  try {
-    final entities = dir.listSync(recursive: false, followLinks: false);
-    for (final entity in entities) {
-      try {
-        if (entity is File) {
-          final lowerPath = entity.path.toLowerCase();
-          if (extensions.any((ext) => lowerPath.endsWith(ext))) {
-            foundFiles.add(entity.path);
-          }
-        } else if (entity is Directory) {
-          final name = entity.path.split('/').last.toLowerCase();
-          if (name == 'proc' || name == 'sys' || name == 'dev') continue;
-          _scanDirectoryBackgroundSync(entity.path, foundFiles, extensions, depth: depth + 1, maxDepth: maxDepth);
-        }
-      } catch (_) {
-      }
-    }
-  } catch (_) {
-  }
-}
+import 'package:ocsafe_cyberguard/models/app_info.dart';
+import 'package:ocsafe_cyberguard/services/app_scanner.dart';
 
 class ApkScanner {
   /// Suspicious file extensions to flag.
@@ -58,6 +13,11 @@ class ApkScanner {
     '.zip', '.rar', '.7z',
     '.dex', '.jar', '.so',
   ];
+
+  static Future<List<AppInfo>> getInstalledApps() async {
+    final scanner = AppScanner();
+    return await scanner.fetchAllAppsWithPermissions();
+  }
 
   /// Root directories to scan on Android.
   /// NOTE: /sdcard is a symlink to /storage/emulated/0 — do NOT include both
@@ -76,10 +36,7 @@ class ApkScanner {
     '/storage/emulated/0/Pictures',
     '/storage/emulated/0/Android/data',
     '/storage/emulated/0/Android/obb',
-    '/storage/emulated/0/Android/media',
-    '/storage/emulated/0/Movies',
     '/storage/emulated/0/WhatsApp/Media',
-    '/storage/emulated/0/WhatsApp/Documents',
     '/storage/emulated/0/Telegram',
   ];
 
@@ -100,18 +57,47 @@ class ApkScanner {
         ? _rootDirectoriesToScan
         : _priorityDirectories;
 
-    // Run the directory scanning on a background thread using compute.
-    // We pass the parameters inside a Map.
-    final List<String> backgroundFoundFiles = await compute(scanDirectoriesBackground, {
-      'dirsToScan': dirsToScan,
-      'extensions': _suspiciousExtensions,
-      'maxDepth': _maxDepth,
-    });
-    
-    foundFiles.addAll(backgroundFoundFiles);
+    for (final dirPath in dirsToScan) {
+      await _scanDirectory(dirPath, foundFiles, depth: 0);
+    }
 
     // Deduplicate paths (guard against any remaining symlink duplicates)
     return foundFiles.toSet().toList();
+  }
+
+  /// Recursively scans a directory up to [_maxDepth] levels deep.
+  Future<void> _scanDirectory(
+    String dirPath,
+    List<String> foundFiles, {
+    required int depth,
+  }) async {
+    if (depth > _maxDepth) return;
+
+    final dir = Directory(dirPath);
+    if (!await dir.exists()) return;
+
+    try {
+      final entities = dir.listSync(recursive: false, followLinks: false);
+      for (final entity in entities) {
+        try {
+          if (entity is File) {
+            final lowerPath = entity.path.toLowerCase();
+            if (_suspiciousExtensions.any((ext) => lowerPath.endsWith(ext))) {
+              foundFiles.add(entity.path);
+            }
+          } else if (entity is Directory) {
+            // Skip proc/sys virtual FS to avoid hangs
+            final name = entity.path.split('/').last.toLowerCase();
+            if (name == 'proc' || name == 'sys' || name == 'dev') continue;
+            await _scanDirectory(entity.path, foundFiles, depth: depth + 1);
+          }
+        } catch (_) {
+          // Skip files/dirs we can't access
+        }
+      }
+    } catch (_) {
+      // Directory access denied — skip silently
+    }
   }
 
   /// Native method channel for storage permission — bypasses permission_handler

@@ -5,17 +5,59 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
+import android.os.Bundle
 import androidx.annotation.NonNull
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.EventChannel
+import io.flutter.embedding.engine.FlutterEngineCache
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.ocsafe.cyberguard/uninstall"
     private val STORAGE_CHANNEL = "com.ocsafe.cyberguard/storage_permission"
+    private val EVENT_CHANNEL = "com.ocsafe.cyberguard/package_receiver"
+    
+    companion object {
+        var eventSink: EventChannel.EventSink? = null
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        eventSink = null
+        FlutterEngineCache.getInstance().remove("ocsafe_engine")
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        
+        // Start persistent background service to keep BroadcastReceiver alive
+        val serviceIntent = Intent(this, BackgroundScannerService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
+    }
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        // Cache engine for background broadcast receiver
+        FlutterEngineCache.getInstance().put("ocsafe_engine", flutterEngine)
+
+        // Setup EventChannel for package events
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, EVENT_CHANNEL).setStreamHandler(
+            object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    eventSink = events
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    eventSink = null
+                }
+            }
+        )
 
         // Uninstall channel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->

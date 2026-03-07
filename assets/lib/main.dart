@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:ocsafe_cyberguard/core/theme/app_theme.dart';
+import 'package:ocsafe_cyberguard/theme/app_theme.dart';
 import 'package:ocsafe_cyberguard/providers/security_provider.dart';
 import 'package:ocsafe_cyberguard/screens/home_screen.dart';
 
@@ -18,27 +18,19 @@ void mainBackground() {
   
   backgroundChannel.setMethodCallHandler((call) async {
     print('DEBUG: Background Method Call: ${call.method} with args: ${call.arguments}');
-    
-    if (call.method == 'package_event') {
+    if (call.method == 'scan_app') {
       final String? packageName = call.arguments['package_name'];
-      final String? action = call.arguments['action'];
-      
       if (packageName != null) {
+        print('DEBUG: Starting headless scan for $packageName');
+        // Initialize independent headless instances
         final securityProvider = SecurityProvider();
         await securityProvider.initializeHeadless();
-        
-        if (action == 'android.intent.action.PACKAGE_ADDED') {
-          print('DEBUG: Starting headless scan for $packageName');
-          await securityProvider.scanSingleAppHeadless(packageName);
-        } else if (action == 'android.intent.action.PACKAGE_REMOVED') {
-          print('DEBUG: Starting headless cleanup for $packageName');
-          await securityProvider.removeThreatHeadless(packageName);
-        }
+        await securityProvider.scanSingleAppHeadless(packageName);
       }
     }
   });
 
-  // Signal Kotlin that we are ready to receive queued events
+  // Signal Kotlin that we are ready to receive queued scans
   backgroundChannel.invokeMethod('flutter_ready');
 }
 

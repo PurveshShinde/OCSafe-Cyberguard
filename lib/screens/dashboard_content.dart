@@ -27,9 +27,7 @@ class DashboardContent extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildScoreCard(context, provider),
-              const SizedBox(height: 16),
-              _buildScanButton(context, provider),
+              _buildSummaryCard(context, provider),
               const SizedBox(height: 24),
               _buildQuickActions(context, provider),
               const SizedBox(height: 24),
@@ -41,32 +39,39 @@ class DashboardContent extends StatelessWidget {
     );
   }
 
-  /// Security score display with circular indicator.
-  Widget _buildScoreCard(BuildContext context, SecurityProvider provider) {
+  /// Security summary card containing the score and scan button.
+  Widget _buildSummaryCard(BuildContext context, SecurityProvider provider) {
     final score = provider.securityScore;
-    final color = score >= 80
-        ? AppColors.primary
-        : score >= 50
-            ? AppColors.warning
-            : AppColors.error;
+    final color = AppColors.primary; // Screenshot shows strict purple
 
-    return SimpleCard(
+    return Container(
       padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
       child: Column(
         children: [
           SizedBox(
-            width: 140,
-            height: 140,
+            width: 180,
+            height: 180,
             child: Stack(
               alignment: Alignment.center,
               children: [
                 SizedBox(
-                  width: 140,
-                  height: 140,
+                  width: 180,
+                  height: 180,
                   child: CircularProgressIndicator(
                     value: score / 100,
-                    strokeWidth: 10,
-                    backgroundColor: AppColors.surfaceLight,
+                    strokeWidth: 16,
+                    backgroundColor: color.withValues(alpha: 0.15),
                     valueColor: AlwaysStoppedAnimation(color),
                   ),
                 ),
@@ -77,49 +82,77 @@ class DashboardContent extends StatelessWidget {
                       '$score%',
                       style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                             color: color,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 48,
                           ),
                     ),
+                    const SizedBox(height: 4),
                     Text(
-                      'Security Score',
-                      style: Theme.of(context).textTheme.bodySmall,
+                      'SECURITY SCORE',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.0,
+                            color: Colors.grey,
+                            fontSize: 10,
+                          ),
                     ),
                   ],
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
           Text(
             score >= 80
                 ? 'Your device is well protected'
                 : score >= 50
                     ? 'Some security issues found'
                     : 'Security attention needed',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: color),
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                ),
+            textAlign: TextAlign.center,
           ),
-          if (provider.lastScanResult != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              'Last scan: ${DateFormat.yMMMd().add_jm().format(provider.lastScanResult!.scanDate)}',
-              style: Theme.of(context).textTheme.bodySmall,
+          const SizedBox(height: 8),
+          Text(
+            provider.lastScanResult != null
+              ? 'Last scan: ${DateFormat.yMMMd().add_jm().format(provider.lastScanResult!.scanDate)}'
+              : 'Never scanned',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Colors.grey.shade600,
+                ),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.security, size: 20, color: Colors.white),
+              label: Text(
+                provider.isScanning ? 'Scanning...' : 'Run Smart Scan',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                elevation: 0,
+              ),
+              onPressed: () async {
+                if (provider.isScanning) return;
+                await _startScanWithPermission(context, provider);
+              },
             ),
-          ],
+          ),
         ],
       ),
-    );
-  }
-
-  /// Smart scan trigger button.
-  Widget _buildScanButton(BuildContext context, SecurityProvider provider) {
-    return PrimaryButton(
-      text: provider.isScanning ? 'Scanning...' : 'Run Smart Scan',
-      icon: Icons.radar,
-      isLoading: provider.isScanning,
-      onPressed: () async {
-        if (provider.isScanning) return;
-        await _startScanWithPermission(context, provider);
-      },
     );
   }
 
@@ -250,9 +283,9 @@ class DashboardContent extends StatelessWidget {
           crossAxisCount: 2,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 1.4,
+          mainAxisSpacing: 16,
+          crossAxisSpacing: 16,
+          childAspectRatio: 1.1,
           children: [
             _actionCard(
               context,
@@ -262,6 +295,9 @@ class DashboardContent extends StatelessWidget {
               trailing: Switch(
                 value: provider.realtimeProtection,
                 onChanged: provider.toggleRealtimeProtection,
+                activeColor: Colors.white,
+                activeTrackColor: AppColors.primary,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
             ),
             _actionCard(
@@ -270,20 +306,37 @@ class DashboardContent extends StatelessWidget {
               label: 'Safe\nBrowsing',
               isActive: provider.safeBrowsing,
               onTap: () => provider.toggleSafeBrowsing(!provider.safeBrowsing),
+              trailing: Switch(
+                value: provider.safeBrowsing,
+                onChanged: (val) => provider.toggleSafeBrowsing(val),
+                activeColor: Colors.white,
+                activeTrackColor: AppColors.primary,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
             _actionCard(
               context,
-              icon: Icons.lock_person,
+              icon: Icons.lock,
               label: 'App\nPermissions',
               onTap: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const PermissionsScreen())),
+              trailing: Switch(
+                value: false,
+                onChanged: null, // Visually disabled off switch
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
             _actionCard(
               context,
-              icon: Icons.speed,
+              icon: Icons.monitor_heart,
               label: 'Device\nHealth',
               onTap: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const OptimizationScreen())),
+              trailing: Switch(
+                value: false,
+                onChanged: null, // Visually disabled off switch
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
           ],
         ),
@@ -301,28 +354,35 @@ class DashboardContent extends StatelessWidget {
   }) {
     return SimpleCard(
       onTap: onTap,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(
                 icon,
-                color: isActive ? AppColors.primary : AppColors.textSecondary,
+                color: AppColors.primary,
                 size: 28,
               ),
               if (trailing != null)
-                SizedBox(height: 24, width: 40, child: trailing),
+                SizedBox(
+                  height: 30,
+                  child: Transform.scale(scale: 0.8, child: trailing),
+                ),
             ],
           ),
+          const SizedBox(height: 12),
           Text(
             label,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: isActive ? AppColors.textPrimary : AppColors.textSecondary,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                  height: 1.2,
+                  color: AppColors.textPrimary, // Always dark like screenshot
                 ),
           ),
         ],
@@ -364,35 +424,18 @@ class DashboardContent extends StatelessWidget {
   }
 
   Widget _activityTile(BuildContext context, ActivityLog log) {
-    IconData icon;
-    Color color;
+    IconData icon = Icons.check_circle;
+    Color color = AppColors.primary;
 
-    switch (log.type.name) {
-      case 'threat':
-        icon = Icons.warning;
-        color = AppColors.error;
-        break;
-      case 'permission':
-        icon = Icons.lock;
-        color = AppColors.warning;
-        break;
-      case 'protection':
-        icon = Icons.shield;
-        color = AppColors.primary;
-        break;
-      default:
-        icon = Icons.radar;
-        color = AppColors.primary;
+    if (log.type.name == 'threat') {
+      icon = Icons.warning;
+      color = AppColors.error;
     }
 
     return ListTile(
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(icon, color: color, size: 20),
+      leading: CircleAvatar(
+        backgroundColor: color.withValues(alpha: 0.1),
+        child: Icon(icon, color: color, size: 24),
       ),
       title: Text(
         log.message,

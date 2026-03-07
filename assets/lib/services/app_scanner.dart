@@ -1,4 +1,5 @@
 import 'package:device_apps/device_apps.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:ocsafe_cyberguard/models/app_info.dart';
 
@@ -28,8 +29,10 @@ class AppScanner {
       appName: app.appName,
       packageName: app.packageName,
       versionName: app.versionName ?? 'Unknown',
+      versionCode: app.versionCode ?? 0,
       isSystemApp: app.systemApp,
       installSource: installSource,
+      apkFilePath: app.apkFilePath,
       requestedPermissions: permissions,
       hasLaunchIntent: hasLaunchIntent,
     );

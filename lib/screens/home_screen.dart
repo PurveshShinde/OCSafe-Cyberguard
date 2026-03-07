@@ -75,73 +75,123 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildDrawer() {
     return Drawer(
-      backgroundColor: AppColors.background,
-      child: ListView(
-        padding: EdgeInsets.zero,
+      backgroundColor: Colors.white,
+      child: Column(
         children: [
-          DrawerHeader(
-            decoration: const BoxDecoration(color: AppColors.surface),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.only(top: 70, bottom: 24, left: 24),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.05),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                const Icon(Icons.security, size: 40, color: AppColors.primary),
-                const SizedBox(height: 12),
-                Text(
-                  'OcSafe CyberGuard',
-                  style: Theme.of(context).textTheme.titleLarge,
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(Icons.security, size: 36, color: Colors.white),
                 ),
-                Text(
+                const SizedBox(height: 16),
+                const Text(
+                  'OcSafe CyberGuard',
+                  style: TextStyle(
+                    color: Color(0xFF1E293B), // Dark slate blue
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
                   'Mobile Security',
-                  style: Theme.of(context).textTheme.bodyMedium,
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 15,
+                  ),
                 ),
               ],
             ),
           ),
-          _drawerItem(Icons.home_outlined, 'Dashboard', () {
-            Navigator.pop(context);
-            setState(() => _currentIndex = 0);
-          }),
-          _drawerItem(Icons.security_outlined, 'Permissions', () {
-            Navigator.pop(context);
-            Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const PermissionsScreen()));
-          }),
-          _drawerItem(Icons.speed_outlined, 'Device Health', () {
-            Navigator.pop(context);
-            Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const OptimizationScreen()));
-          }),
-          _drawerItem(Icons.analytics_outlined, 'Scan History', () {
-            Navigator.pop(context);
-            setState(() => _currentIndex = 1);
-          }),
-          const Divider(color: AppColors.divider),
-          _drawerItem(Icons.settings_outlined, 'Settings', () {
-            Navigator.pop(context);
-            Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const SettingsScreen()));
-          }),
-          _drawerItem(Icons.info_outline, 'About', () {
-            Navigator.pop(context);
-            showAboutDialog(
-              context: context,
-              applicationName: 'OcSafe CyberGuard',
-              applicationVersion: '1.0.0',
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(vertical: 12),
               children: [
-                const Text('A mobile security application that helps protect your device.'),
+                _drawerItem(Icons.home, 'Dashboard', () {
+                  Navigator.pop(context);
+                  setState(() => _currentIndex = 0);
+                }),
+                _drawerItem(Icons.security, 'Permissions', () {
+                  Navigator.pop(context);
+                  Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const PermissionsScreen()));
+                }),
+                _drawerItem(Icons.monitor_heart, 'Device Health', () {
+                  Navigator.pop(context);
+                  Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const OptimizationScreen()));
+                }),
+                _drawerItem(Icons.history, 'Scan History', () {
+                  Navigator.pop(context);
+                  setState(() => _currentIndex = 1);
+                }),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Divider(color: Color(0xFFE2E8F0), height: 1), // Light gray divider
+                ),
+                _drawerItem(Icons.settings, 'Settings', () {
+                  Navigator.pop(context);
+                  Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()));
+                }),
+                _drawerItem(Icons.info_outline, 'About', () {
+                  Navigator.pop(context);
+                  showAboutDialog(
+                    context: context,
+                    applicationName: 'OcSafe CyberGuard',
+                    applicationVersion: '1.0.0',
+                    children: [
+                      const Text('A mobile security application that helps protect your device.'),
+                    ],
+                  );
+                }),
               ],
-            );
-          }),
+            ),
+          ),
+          _drawerItem(
+            Icons.logout,
+            'Sign Out',
+            () {
+              Navigator.pop(context);
+              // Implement logout
+            },
+            isDestructive: true,
+          ),
+          const SizedBox(height: 24),
         ],
       ),
     );
   }
 
-  Widget _drawerItem(IconData icon, String label, VoidCallback onTap) {
+  Widget _drawerItem(IconData icon, String label, VoidCallback onTap, {bool isDestructive = false}) {
     return ListTile(
-      leading: Icon(icon, color: AppColors.textSecondary),
-      title: Text(label, style: const TextStyle(color: AppColors.textPrimary)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+      leading: Icon(
+        icon, 
+        color: isDestructive ? Colors.red.shade400 : const Color(0xFF64748B), // Slate gray for standard items
+        size: 26,
+      ),
+      title: Text(
+        label, 
+        style: TextStyle(
+          color: isDestructive ? Colors.red.shade400 : const Color(0xFF1E293B),
+          fontWeight: isDestructive ? FontWeight.bold : FontWeight.w600,
+          fontSize: 16,
+        )
+      ),
       onTap: onTap,
     );
   }

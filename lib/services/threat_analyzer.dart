@@ -1,10 +1,27 @@
-import 'dart:io';
-import 'package:archive/archive.dart';
-import 'package:flutter/foundation.dart';
 import 'package:ocsafe_cyberguard/models/app_info.dart';
 import 'package:ocsafe_cyberguard/models/threat.dart';
 import 'package:ocsafe_cyberguard/services/permission_scanner.dart';
+import 'package:ocsafe_cyberguard/services/signature_scanner.dart';
+import 'package:ocsafe_cyberguard/services/stealth_app_detector.dart';
+import 'package:ocsafe_cyberguard/services/apk_static_analyzer.dart';
+import 'package:archive/archive.dart';
 
+@pragma('vm:entry-point')
+List<Threat> runThreatAnalysisBackground(List<AppInfo> apps) {
+  final analyzer = ThreatAnalyzer();
+  final List<Threat> threats = [];
+  for (final app in apps) {
+    final threat = analyzer.analyzeApp(app);
+    if (threat != null) threats.add(threat);
+  }
+  return threats;
+}
+
+@pragma('vm:entry-point')
+List<Threat> evaluateSuspiciousFilesBackground(List<String> filePaths) {
+  final analyzer = ThreatAnalyzer();
+  return analyzer.evaluateSuspiciousFiles(filePaths);
+}
 
 class ThreatAnalyzer {
   final PermissionScanner _permissionScanner = PermissionScanner();
@@ -15,7 +32,8 @@ class ThreatAnalyzer {
     'record', 'inject', 'exploit', 'malware', 'virus', 'trojan', 'worm',
     'rootkit', 'rat', 'backdoor', 'phish', 'scam', 'spoof', 'crack',
     'bypass', 'cheat', 'prank', 'fake', 'cloneapp', 'mirror',
-    'adware', 'clicker', 'adserving', 'popups',
+    'adware', 'clicker', 'adserving', 'popups', 'launcher', 'service',
+    'helper', 'manager', 'patch', 'update',
   ];
 
   // --- Known malware / AV-test package names ---
@@ -91,47 +109,7 @@ class ThreatAnalyzer {
     'netflix': 'com.netflix.mediaclient',
   };
 
-  // --- Known legitimate hidden apps (allowlist for stealth checks) ---
-  static const List<String> safeHiddenPackages = [
-    // Core Google/Android
-    'com.google.android.gms',
-    'com.android.systemui',
-    'com.android.vending',
-    'com.google.android.gsf',
-    'com.google.android.ext.services',
-    'com.google.android.as', // Android System Intelligence
-    'com.google.android.networkstack.tethering',
-    'com.android.keychain',
-    'com.android.settings',
 
-    // Common OEMs (OnePlus, Samsung, Xiaomi, etc.)
-    'com.oneplus.widget',
-    'net.oneplus.widget',
-    'com.oneplus.security',
-    'com.oneplus.camera.service',
-    'com.oplus.security',
-    'com.oplus.battery',
-    'com.oplus.pay',
-    'com.samsung.android.lool',
-    'com.samsung.android.securitylogagent',
-    'com.xiaomi.discover',
-    'com.coloros.safecenter',
-    'com.heytap.mcs',
-
-    // Other System level components
-    'com.android.providers.media.module',
-    'com.android.providers.telephony',
-    'com.android.bluetooth',
-    'com.android.nfc',
-    'com.android.certinstaller',
-    
-    // Media / Companion Apps mentioned by user
-    'com.android.soundrecorder',
-    'com.heytap.speechassist',
-    'com.google.android.setupwizard',
-    'com.coloros.lockassistant', // Lock screen magazine
-    'com.heytap.pictorial', // Lock screen magazine alternative
-  ];
 
   /// Main method for analyzing an app on the fly.
   /// Analyzes ALL apps including system apps (for known malware blocklist).
@@ -153,11 +131,8 @@ class ThreatAnalyzer {
         .where((p) => PermissionScanner.dangerousPermissionsList.contains(p))
         .toList();
 
-    // 1. Known malware package blocklist (highest priority check)
-    final packageLower = app.packageName.toLowerCase();
-    bool isKnownMalware = knownMaliciousPackages
-        .any((known) => packageLower == known.toLowerCase());
-    if (isKnownMalware) {
+    // 1. Signature Scanner (using ThreatIntel)
+    if (SignatureScanner.isMaliciousPackage(app.packageName)) {
       reasons.add('Known malicious package detected in threat database');
       totalScore += 100;
       riskLevel = 'HIGH';
@@ -178,6 +153,7 @@ class ThreatAnalyzer {
     if (!runFullAnalysis) return null;
 
     // 2. Check package name contains AV-test or malware-related patterns
+    final packageLower = app.packageName.toLowerCase();
     bool isAvTestApp = packageLower.contains('avtest') ||
         packageLower.contains('av_test') ||
         packageLower.contains('av-test') ||
@@ -262,41 +238,12 @@ class ThreatAnalyzer {
         }
     }
 
-    // 5.5 Hidden App Detection — runs for ALL non-system apps regardless of icon
-    // Apps without a launch intent (no launcher icon) are hidden from the user.
-    if (!app.hasLaunchIntent) {
-      if (!safeHiddenPackages.contains(app.packageName) && !isTrustedNamespaceAdwareCheck) {
-        int hiddenScoreValue = 20; // Base score for any hidden non-system app
-
-        if (app.requestedPermissions.contains('android.permission.RECEIVE_BOOT_COMPLETED')) {
-          hiddenScoreValue += 20;
-        }
-        if (app.requestedPermissions.contains('android.permission.BIND_ACCESSIBILITY_SERVICE')) {
-          hiddenScoreValue += 40;
-        }
-        if (app.requestedPermissions.contains('android.permission.FOREGROUND_SERVICE')) {
-          hiddenScoreValue += 20;
-        }
-        if (app.requestedPermissions.contains('android.permission.BIND_DEVICE_ADMIN')) {
-          hiddenScoreValue += 40; // Device admin = high danger
-        }
-
-        // Trigger at score >= 20 (any hidden non-system, non-trusted app)
-        if (hiddenScoreValue >= 20) {
-          reasons.add(
-            hiddenScoreValue >= 60
-                ? 'Hidden app with high-level permissions — strong malware indicator.'
-                : 'Hidden background app detected (no launcher icon): possible stealth install.',
-          );
-          totalScore += hiddenScoreValue;
-
-          if (hiddenScoreValue >= 60) {
-            recommendation = 'High risk: This hidden app has elevated permissions. Uninstall recommended.';
-          } else if (recommendation.contains('Review app usage')) {
-            recommendation = 'Hidden app detected. Verify you intentionally installed this background service.';
-          }
-        }
-      }
+    // 5.5 Stealth App Detection
+    if (StealthAppDetector.isStealthApp(app)) {
+      reasons.add('Stealth App Detected: Hidden app with dangerous permissions and suspicious name.');
+      totalScore += 80;
+      riskLevel = 'HIGH';
+      recommendation = 'High risk: This hidden app has stealth characteristics. Uninstall recommended.';
     }
 
     // 6. Unknown Install Source — flag only when combined with other issues
@@ -383,31 +330,6 @@ class ThreatAnalyzer {
 
   /// Inspects ZIP/RAR contents for malicious indicators.
   List<String> _inspectArchiveContents(String filePath) {
-    List<String> indicators = [];
-    try {
-      final file = File(filePath);
-      if (!file.existsSync()) return [];
-
-      final bytes = file.readAsBytesSync();
-      final archive = ZipDecoder().decodeBytes(bytes);
-
-      for (final file in archive) {
-        final innerName = file.name.toLowerCase();
-        
-        if (innerName.endsWith('.apk') || innerName.endsWith('.exe') || innerName.endsWith('.dex')) {
-          indicators.add('Archive contains executable file: ${file.name}');
-        }
-        
-        if (innerName.contains('eicar')) {
-          indicators.add('Known malware test signature detected in archive.');
-        }
-
-        // Potential for deep string search in small text files could be added here
-      }
-    } catch (e) {
-      // If we can't extract (e.g. encrypted or wrong format), we don't flag as malware by default
-      debugPrint('Could not inspect archive $filePath: $e');
-    }
-    return indicators;
+    return ApkStaticAnalyzer.inspectArchiveContents(filePath);
   }
 }

@@ -5,19 +5,19 @@ import 'package:ocsafe_cyberguard/models/threat.dart';
 import 'package:ocsafe_cyberguard/models/scan_result.dart';
 import 'package:ocsafe_cyberguard/models/activity_log.dart';
 import 'package:ocsafe_cyberguard/models/app_info.dart';
+import 'package:ocsafe_cyberguard/models/app_scan_result.dart';
 
-import 'package:ocsafe_cyberguard/services/app_scanner.dart'; // also exports fetchAllAppsBackground
+import 'package:ocsafe_cyberguard/services/app_scanner.dart';
 import 'package:ocsafe_cyberguard/services/apk_scanner.dart';
+import 'package:ocsafe_cyberguard/services/threat_analyzer.dart';
 import 'package:ocsafe_cyberguard/services/device_health_service.dart';
 import 'package:ocsafe_cyberguard/services/database_service.dart';
-import 'package:ocsafe_cyberguard/services/threat_intel.dart';
-import 'package:ocsafe_cyberguard/services/signature_scanner.dart';
-import 'package:ocsafe_cyberguard/services/threat_analyzer.dart';
-import 'package:ocsafe_cyberguard/services/threat_intel.dart';
-import 'package:ocsafe_cyberguard/services/signature_scanner.dart';
 import 'package:ocsafe_cyberguard/services/preferences_service.dart';
 import 'package:ocsafe_cyberguard/services/notification_service.dart';
 import 'package:ocsafe_cyberguard/services/safe_browsing_service.dart';
+import 'package:ocsafe_cyberguard/services/threat_intel.dart';
+import 'package:ocsafe_cyberguard/services/apk_static_analyzer.dart';
+import 'package:ocsafe_cyberguard/services/signature_scanner.dart';
 import 'package:device_apps/device_apps.dart';
 
 /// Central state manager orchestrating the multi-module security scan.
@@ -42,16 +42,26 @@ class SecurityProvider extends ChangeNotifier {
   List<ActivityLog> _activityLogs = [];
   List<ScanResult> _scanHistory = [];
   
+  // Scan Cache Map: packageName -> threat hash (simplification for memory cache)
+  final Map<String, Threat?> _scanCache = {};
+  
+  List<AppInfo> _installedApps = [];
   DeviceHealthData? _deviceData;
-  final Set<String> _notifiedPackages = {};
-  List<String> _trustedApps = [];
+
+  int _scannedApps = 0;
+  int _totalApps = 0;
 
   // Settings
   bool _realtimeProtection = true;
   bool _safeBrowsing = true;
   bool _autoScan = false;
-  String _userName = 'User';
+  String _userName = '';
   String _userEmail = '';
+  List<String> _trustedPackages = [];
+
+  // --- Getters ---
+  int get scannedApps => _scannedApps;
+  int get totalApps => _totalApps;
 
   // --- Getters ---
   int get securityScore => _securityScore;
@@ -62,19 +72,24 @@ class SecurityProvider extends ChangeNotifier {
   List<Threat> get threats => _threats;
   List<ActivityLog> get activityLogs => _activityLogs;
   List<ScanResult> get scanHistory => _scanHistory;
+  List<AppInfo> get installedApps => _installedApps;
+  List<Threat> get detectedThreats => _threats;
   DeviceHealthData? get deviceData => _deviceData;
-  List<String> get trustedApps => _trustedApps;
 
   bool get realtimeProtection => _realtimeProtection;
   bool get safeBrowsing => _safeBrowsing;
   bool get autoScan => _autoScan;
   String get userName => _userName;
   String get userEmail => _userEmail;
+  List<String> get trustedPackages => _trustedPackages;
 
   /// Initialize all data on app start.
   Future<void> initialize() async {
+    await ThreatIntel().loadDatabase(); // Load Threat Database
+    await SignatureScanner().initialize(); // Load Signature Database
     await _loadSettings();
     await loadDeviceInfo();
+    await loadApps();
     await loadHistory();
     await loadActivityLogs();
     
@@ -82,44 +97,44 @@ class SecurityProvider extends ChangeNotifier {
     await _notificationService.init();
     await _notificationService.requestPermission();
     
-    // Setup Real-time Malware Installation Listener
+    // Setup Real-time Malware Installation Listener (Foreground)
     _setupRealtimeListener();
   }
 
   /// Initialize only what's necessary for a headless background scan
   Future<void> initializeHeadless() async {
+    await ThreatIntel().loadDatabase();
+    await SignatureScanner().initialize();
     await _loadSettings();
     await _notificationService.init();
   }
 
   void _setupRealtimeListener() {
-    // Listen for installs and uninstalls to update the UI & memory state
     DeviceApps.listenToAppsChanges().listen((ApplicationEvent event) async {
-      if (event.event == ApplicationEventType.installed || event.event == ApplicationEventType.updated) {
-        if (!_realtimeProtection) return;
-        
-        // Skip scanning if the app is trusted
-        final packageName = event.packageName;
-        if (_trustedApps.contains(packageName)) return;
-        
-        // Fetch app parameters for accurate threat analysis
-        final appInfo = await _appScanner.fetchAppWithPermissions(packageName);
+      if (event.event == ApplicationEventType.installed && _realtimeProtection) {
+        // Fetch app WITH permissions for accurate threat analysis
+        final appInfo = await _appScanner.fetchAppWithPermissions(event.packageName);
         if (appInfo != null) {
-          final threat = _threatAnalyzer.analyzeApp(appInfo);
+          Threat? threat = await _checkSignatureMalware(appInfo);
+          threat ??= _threatAnalyzer.analyzeApp(appInfo, _trustedPackages);
 
-          if (threat != null && threat.riskLevel != 'LOW') {
-            // Update UI list
+          if (threat != null && threat.threatScore >= 60) {
+            // Add to threats list
             _threats.add(threat);
 
             await _logActivity(
-              'Real-Time Detection: ${threat.appName} flagged as ${threat.riskLevel} risk! Reason: ${threat.reasons.first}',
+              'Real-Time Detection: ${threat.appName} flagged as Malware!',
               ActivityType.threat,
             );
-            
-            // NOTE: We don't need to trigger _notificationService here because
-            // the Native PackageReceiver exclusively triggers the Headless isolate 
-            // for ALL push notifications, preventing duplicate notifications.
-            
+
+            await _notificationService.showThreatDetectedNotification(threat);
+          } else if (threat != null) {
+            // Suspicious but not Malware (30-60)
+            _threats.add(threat);
+            await _logActivity(
+              'Real-Time Detection: ${threat.appName} flagged as Suspicious.',
+              ActivityType.threat,
+            );
           } else {
             await _logActivity(
               'Real-Time Scanner: ${appInfo.appName} installed (Safe)',
@@ -133,21 +148,7 @@ class SecurityProvider extends ChangeNotifier {
       } else if (event.event == ApplicationEventType.uninstalled) {
         // If an app was uninstalled, check if it was currently flagged as a threat
         final initialLength = _threats.length;
-        
-        // Find the threat to get its appName before removing it
-        final resolvedThreat = _threats.where((t) => t.packageName == event.packageName).firstOrNull;
-        if (resolvedThreat != null) {
-          _notificationService.cancelWarningNotification(resolvedThreat.appName);
-        }
-        
         _threats.removeWhere((t) => t.packageName == event.packageName);
-        _notifiedPackages.remove(event.packageName); // Allow user to be notified again if they reinstall the malware
-        
-        // Remove from database and history memory
-        await _databaseService.removeThreatsByPackageName(event.packageName);
-        for (var scan in _scanHistory) {
-          scan.threats.removeWhere((t) => t.packageName == event.packageName);
-        }
 
         if (_threats.length < initialLength) {
            await _logActivity(
@@ -162,14 +163,9 @@ class SecurityProvider extends ChangeNotifier {
     });
   }
 
+  /// Headless execution for a single app scan via background service
   Future<void> scanSingleAppHeadless(String packageName) async {
     if (!_realtimeProtection) return;
-    
-    // Skip if trusted
-    if (_trustedApps.contains(packageName)) {
-      print('DEBUG: App $packageName is trusted. Bypassing scan.');
-      return;
-    }
 
     print('DEBUG: scanSingleAppHeadless started for $packageName');
 
@@ -184,28 +180,40 @@ class SecurityProvider extends ChangeNotifier {
 
     if (appInfo != null) {
       print('DEBUG: Analyzing $packageName in background...');
-      final threat = _threatAnalyzer.analyzeApp(appInfo);
+      Threat? threat = await _checkSignatureMalware(appInfo);
+      threat ??= _threatAnalyzer.analyzeApp(appInfo, _trustedPackages);
 
-      if (threat != null && threat.riskLevel != 'LOW') {
+      if (threat != null && threat.threatScore >= 60) {
         print('DEBUG: Threat detected in background! ${threat.appName}');
         await _logActivity(
-          'Headless Detection: ${threat.appName} flagged as ${threat.riskLevel} risk!',
+          'Headless Detection: ${threat.appName} flagged as Malware!',
           ActivityType.threat,
         );
-        await _notificationService.showWarningNotification(
-            appName: threat.appName,
-            riskLevel: threat.riskLevel,
-            reason: threat.reasons.first,
-            packageName: threat.packageName,
-        );
+        await _notificationService.showThreatDetectedNotification(threat);
       } else {
-        print('DEBUG: App is safe.');
-        await _logActivity(
-          'Headless Scanner: ${appInfo.appName} installed (Safe)',
-          ActivityType.protection,
-        );
+        print('DEBUG: App is safe or suspicious but below notification threshold.');
       }
     }
+  }
+
+  /// Evaluates an app against the signature databases (Packages only)
+  Future<Threat?> _checkSignatureMalware(AppInfo appInfo) async {
+    final scanner = SignatureScanner();
+
+    // 1. Check Package Name
+    if (scanner.isMaliciousPackage(appInfo.packageName)) {
+      return Threat(
+        appName: appInfo.appName,
+        packageName: appInfo.packageName,
+        riskLevel: 'HIGH',
+        threatScore: 100,
+        reasons: ['Signature Match: Known malicious package name'],
+        permissionsRequested: appInfo.requestedPermissions,
+        recommendedAction: 'DANGEROUS: Known Malware. Uninstall immediately.',
+      );
+    }
+
+    return null;
   }
 
   void _updateScore() {
@@ -224,13 +232,6 @@ class SecurityProvider extends ChangeNotifier {
 
   void removeApkThreat(Threat threat) async {
     _threats.removeWhere((t) => t.packageName == threat.packageName);
-    
-    // Persist removal
-    await _databaseService.removeThreatsByPackageName(threat.packageName);
-    for (var scan in _scanHistory) {
-      scan.threats.removeWhere((t) => t.packageName == threat.packageName);
-    }
-
     _updateScore();
     await _logActivity(
       'Threat Removed: ${threat.appName} was deleted from storage.',
@@ -243,48 +244,50 @@ class SecurityProvider extends ChangeNotifier {
   void removeAppThreat(String packageName) async {
     final initialLength = _threats.length;
     _threats.removeWhere((t) => t.packageName == packageName);
-    
     if (_threats.length < initialLength) {
-       // Persist removal
-       await _databaseService.removeThreatsByPackageName(packageName);
-       for (var scan in _scanHistory) {
-         scan.threats.removeWhere((t) => t.packageName == packageName);
-       }
-       
        _updateScore();
        notifyListeners();
     }
   }
 
-  /// Trusts a flagged app, permanently whitelisting it and restoring the score.
-  Future<void> trustApp(Threat threat) async {
-    // 1. Save to persistent preferences
-    await _preferencesService.addTrustedApp(threat.packageName);
-    _trustedApps.add(threat.packageName);
-
-    // 2. Remove from active threats
-    _threats.removeWhere((t) => t.packageName == threat.packageName);
-    
-    // 3. Remove from history memory
-    for (var scan in _scanHistory) {
-      scan.threats.removeWhere((t) => t.packageName == threat.packageName);
+  /// Manually mark an app as trusted. It will no longer be flagged as a threat.
+  Future<void> trustApp(String packageName) async {
+    if (!_trustedPackages.contains(packageName)) {
+      _trustedPackages.add(packageName);
+      await _preferencesService.setTrustedPackages(_trustedPackages);
+      
+      // Remove from active threats if it was flagged
+      removeAppThreat(packageName);
+      
+      await _logActivity(
+        'User trusted app: $packageName',
+        ActivityType.protection,
+      );
+      notifyListeners();
     }
-    
-    // 4. Remove from database history
-    await _databaseService.removeThreatsByPackageName(threat.packageName);
-    
-    // 5. Cancel any pending notification for it
-    await _notificationService.cancelWarningNotification(threat.appName);
-    
-    // 6. Recalculate security score explicitly
-    _updateScore();
+  }
 
-    // 7. Log User Action
-    await _logActivity(
-      'User marked ${threat.appName} as Trusted. It will be ignored in future scans.',
-      ActivityType.protection,
-    );
-    
+  /// Alias for trustApp used in UI widgets
+  Future<void> addToTrusted(String packageName) => trustApp(packageName);
+
+  /// Triggers a native uninstallation prompt for the given package.
+  Future<void> uninstallApp(String packageName) async {
+    try {
+      const channel = MethodChannel('com.ocsafe.cyberguard/uninstall');
+      await channel.invokeMethod('uninstall_app', {'package_name': packageName});
+      await _logActivity('Requested uninstallation: $packageName', ActivityType.protection);
+    } catch (e) {
+      debugPrint('Uninstall Error: $e');
+    }
+  }
+
+  /// Clears the scan cache and resets security state.
+  Future<void> clearCache() async {
+    await _preferencesService.saveScanCache({}, {});
+    _threats.clear();
+    _securityScore = 100;
+    _scanCache.clear();
+    await _logActivity('Scan cache cleared by user', ActivityType.protection);
     notifyListeners();
   }
 
@@ -297,88 +300,78 @@ class SecurityProvider extends ChangeNotifier {
   /// Runs a smart security scan with staged timing for UX.
   /// If [_isFullScan] is true, scans both installed apps and device storage.
   /// If false, scans installed apps only (Limited Scan).
+  /// Runs the full security scan using background isolates.
   Future<void> runScan() async {
-    if (_isScanning) return; // prevent multiple scans
+    if (_isScanning) return;
     
     _isScanning = true;
     _threats.clear();
+    _scannedApps = 0;
+    _totalApps = 0;
+    _scanStage = 'Starting Smart Scan...';
+    notifyListeners();
+    print("Scan started");
     
     try {
-      // 1. Scan installed apps
-      _scanStage = 'Scanning installed apps...';
+      // 1. Fetch apps — filter out system apps to focus on user-installed only
+      final allApps = await _appScanner.fetchAllAppsWithPermissions();
+      _installedApps = allApps.where((app) => !app.isSystemApp).toList();
+      _totalApps = _installedApps.length;
+      debugPrint("User apps found: $_totalApps (filtered from ${allApps.length} total)");
       notifyListeners();
-      await Future.delayed(const Duration(milliseconds: 800));
 
-      // 2. Fetch apps WITH real permissions for accurate analysis (in background isolate)
-      _scanStage = 'Analyzing app permissions...';
-      notifyListeners();
-      await Future.delayed(const Duration(milliseconds: 800));
-
-      final RootIsolateToken token = RootIsolateToken.instance!;
-      final List<AppInfo> apps = await compute(fetchAllAppsBackground, token);
+      // 2. Perform Scan in background chunks for progress tracking
+      final List<AppScanResult> allResults = [];
+      const int chunkSize = 10;
       
-      // Filter out trusted applications from the scan queue
-      apps.removeWhere((app) => _trustedApps.contains(app.packageName));
-
-
-      // 3. Suspicious packages analysis + threat detection (in background isolate)
-      _scanStage = 'Detecting malware & suspicious packages...';
-      notifyListeners();
-      await Future.delayed(const Duration(milliseconds: 800));
-
-      List<Threat> detectedThreats = await compute(runThreatAnalysisBackground, apps);
-
-      // 4. Scan for suspicious files across entire device storage (APKs, ZIPs, DEX, etc.)
-      //    Only runs in Full Scan mode (when storage permission is granted).
-      List<String> filePaths = [];
-      if (_isFullScan) {
-        _scanStage = 'Scanning whole device storage for malicious files...';
-        notifyListeners();
-        await Future.delayed(const Duration(milliseconds: 800));
+      for (int i = 0; i < _installedApps.length; i += chunkSize) {
+        final end = (i + chunkSize < _installedApps.length) 
+            ? i + chunkSize 
+            : _installedApps.length;
         
-        filePaths = await _apkScanner.scanForSuspiciousFiles();
-        final fileThreats = await compute(evaluateSuspiciousFilesBackground, filePaths);
-        detectedThreats.addAll(fileThreats);
-      } else {
-        _scanStage = 'Limited scan — skipping storage (no permission)...';
+        final chunk = _installedApps.sublist(i, end);
+        _scanStage = 'Analyzing apps ${i + 1} to $end...';
         notifyListeners();
-        await Future.delayed(const Duration(milliseconds: 600));
+
+        // Perform parallel scan for the chunk
+        final List<AppScanResult> chunkResults = await compute(_performScanChunk, chunk);
+        allResults.addAll(chunkResults);
+        
+        _scannedApps = end;
+        notifyListeners();
       }
 
-      // 5. Deduplicate & calculate threats & generate report
-      // On Android, /sdcard and /storage/emulated/0 are symlinked — same files
-      // may be found twice. Deduplicate by packageName (file path for file threats).
-      _scanStage = 'Calculating threats & generating report...';
-      notifyListeners();
-      await Future.delayed(const Duration(milliseconds: 800));
+      // 3. Process results
+      final List<Threat> detectedThreats = [];
+      for (var res in allResults) {
+        if (res.score >= 30) {
+          final app = _installedApps.firstWhere((a) => a.packageName == res.packageName);
+          final threat = _threatAnalyzer.analyzeApp(app, _trustedPackages);
+          if (threat != null) detectedThreats.add(threat);
+        }
+      }
 
-      final seen = <String>{};
-      final uniqueThreats = detectedThreats.where((t) => seen.add(t.packageName)).toList();
-
-      _threats = uniqueThreats;
+      _threats = detectedThreats;
       _updateScore();
 
-      // Create scan result
       _lastScanResult = ScanResult(
         scanDate: DateTime.now(),
-        totalAppsScanned: apps.length,
+        totalAppsScanned: _totalApps,
         threatCount: _threats.length,
         securityScore: _securityScore,
         threats: _threats,
+        appResults: allResults,
         scanMode: _isFullScan ? 'full' : 'limited',
       );
 
-      // Persist to database
       await _databaseService.insertScanResult(_lastScanResult!);
-
-      // Log completion
-      final modeLabel = _isFullScan ? 'Full Scan' : 'Limited Scan';
       await _logActivity(
-        '$modeLabel completed: ${apps.length} apps scanned, ${filePaths.length} files checked, ${_threats.length} threats found',
+        'Scan completed: $_totalApps apps scanned, ${_threats.length} threats detected',
         ActivityType.scan,
       );
 
     } catch (e) {
+      debugPrint('Scan Error: $e');
       await _logActivity('Scan failed: $e', ActivityType.scan);
     } finally {
       _isScanning = false;
@@ -388,6 +381,10 @@ class SecurityProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+
+
+
 
   /// Toggles real-time protection on/off.
   Future<void> toggleRealtimeProtection(bool value) async {
@@ -446,14 +443,15 @@ class SecurityProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Loads installed apps.
+  Future<void> loadApps() async {
+    _installedApps = await _appScanner.fetchAllAppsWithPermissions();
+    notifyListeners();
+  }
+
   /// Loads scan history from database.
   Future<void> loadHistory() async {
     _scanHistory = await _databaseService.getScanHistory();
-    if (_scanHistory.isNotEmpty) {
-      _lastScanResult = _scanHistory.first;
-      _threats = List.from(_lastScanResult!.threats); // Restore active threats
-      _updateScore(); // Restore the previous security score based on threats
-    }
     notifyListeners();
   }
 
@@ -483,7 +481,7 @@ class SecurityProvider extends ChangeNotifier {
     _autoScan = await _preferencesService.getAutoScan();
     _userName = await _preferencesService.getUserName();
     _userEmail = await _preferencesService.getUserEmail();
-    _trustedApps = await _preferencesService.getTrustedApps();
+    _trustedPackages = await _preferencesService.getTrustedPackages();
     notifyListeners();
   }
 
@@ -495,14 +493,16 @@ class SecurityProvider extends ChangeNotifier {
     );
     await _databaseService.insertActivityLog(log);
   }
+}
 
-  /// Removes a threat from the database and history in a headless/background context.
-  Future<void> removeThreatHeadless(String packageName) async {
-    print('DEBUG: Headless removal for $packageName');
-    await _databaseService.removeThreatsByPackageName(packageName);
-    await _logActivity(
-      'Headless Cleanup: $packageName was uninstalled (Removed from history)',
-      ActivityType.protection,
-    );
+/// Top-level function for scanning a chunk of apps.
+Future<List<AppScanResult>> _performScanChunk(List<AppInfo> apps) async {
+  List<AppScanResult> results = [];
+  for (final app in apps) {
+    final result = ThreatAnalyzer.analyzeFull(app);
+    results.add(result);
+    // Brief delay to prevent isolate hogging
+    await Future.delayed(const Duration(milliseconds: 1));
   }
+  return results;
 }

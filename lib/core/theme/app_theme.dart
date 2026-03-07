@@ -1,42 +1,64 @@
 import 'package:flutter/material.dart';
 
-/// Minimal dark theme color palette for OcSafe CyberGuard.
+/// Purple-on-white theme for OcSafe CyberGuard.
+/// This is the primary/canonical theme file used by all screens.
 class AppColors {
-  static const Color background = Color(0xFF121212);
-  static const Color surface = Color(0xFF1E1E1E);
-  static const Color surfaceLight = Color(0xFF2C2C2C);
+  // Core palette — purple brand + white background
+  static const Color primary       = Color(0xFF8B5CF6);
+  static const Color primaryAccent = Color(0xFFA855F7);
+  static const Color background    = Color(0xFFFFFFFF);
+  static const Color surface       = Color(0xFFF6F3FF); // lavender card
+  static const Color surfaceLight  = Color(0xFFEDE9FE); // slightly darker lavender
 
-  static const Color primary = Color(0xFF4CAF50);
-  static const Color primaryLight = Color(0xFF81C784);
-  static const Color error = Color(0xFFEF5350);
-  static const Color warning = Color(0xFFFFA726);
+  // Text
+  static const Color textPrimary   = Color(0xFF111827);
+  static const Color textSecondary = Color(0xFF6B7280);
 
-  static const Color textPrimary = Color(0xFFE0E0E0);
-  static const Color textSecondary = Color(0xFF9E9E9E);
-  static const Color divider = Color(0xFF2C2C2C);
+  // Semantic
+  static const Color success = Color(0xFF10B981);
+  static const Color warning = Color(0xFFF59E0B);
+  static const Color error   = Color(0xFFEF4444);
+
+  // Dividers / borders
+  static const Color divider = Color(0xFFE5E7EB);
+
+  // Gradient
+  static const LinearGradient primaryGradient = LinearGradient(
+    colors: [primary, primaryAccent],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  // Aliases kept for legacy widget references
+  static const Color card = surface;
 }
 
 class AppTheme {
-  static ThemeData get darkTheme {
+  static const double borderRadius = 12.0;
+
+  static ThemeData get theme {
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
-      scaffoldBackgroundColor: AppColors.background,
+      brightness: Brightness.light,
       primaryColor: AppColors.primary,
-      colorScheme: const ColorScheme.dark(
+      scaffoldBackgroundColor: AppColors.background,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: AppColors.primary,
         primary: AppColors.primary,
-        secondary: AppColors.primaryLight,
-        surface: AppColors.surface,
+        secondary: AppColors.primaryAccent,
+        surface: AppColors.background,
         error: AppColors.error,
       ),
       appBarTheme: const AppBarTheme(
         backgroundColor: AppColors.background,
         elevation: 0,
+        scrolledUnderElevation: 0,
         centerTitle: true,
         titleTextStyle: TextStyle(
           fontSize: 20,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w800,
           color: AppColors.textPrimary,
+          letterSpacing: -0.5,
         ),
         iconTheme: IconThemeData(color: AppColors.textPrimary),
       ),
@@ -44,7 +66,7 @@ class AppTheme {
         color: AppColors.surface,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(borderRadius),
         ),
       ),
       dividerTheme: const DividerThemeData(
@@ -52,25 +74,48 @@ class AppTheme {
         thickness: 1,
       ),
       iconTheme: const IconThemeData(color: AppColors.textPrimary),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(borderRadius),
+          ),
+        ),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          return states.contains(WidgetState.selected)
+              ? AppColors.primary
+              : AppColors.textSecondary;
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          return states.contains(WidgetState.selected)
+              ? AppColors.primary.withValues(alpha: 0.3)
+              : AppColors.surfaceLight;
+        }),
+      ),
       textTheme: const TextTheme(
         headlineLarge: TextStyle(
           fontSize: 28,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w900,
           color: AppColors.textPrimary,
+          letterSpacing: -0.5,
         ),
         headlineMedium: TextStyle(
           fontSize: 22,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
           color: AppColors.textPrimary,
+          letterSpacing: -0.5,
         ),
         titleLarge: TextStyle(
           fontSize: 18,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
           color: AppColors.textPrimary,
         ),
         titleMedium: TextStyle(
           fontSize: 16,
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w600,
           color: AppColors.textPrimary,
         ),
         bodyLarge: TextStyle(
@@ -85,20 +130,6 @@ class AppTheme {
           fontSize: 12,
           color: AppColors.textSecondary,
         ),
-      ),
-      switchTheme: SwitchThemeData(
-        thumbColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) {
-            return AppColors.primary;
-          }
-          return AppColors.textSecondary;
-        }),
-        trackColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) {
-            return AppColors.primary.withValues(alpha: 0.3);
-          }
-          return AppColors.surfaceLight;
-        }),
       ),
     );
   }

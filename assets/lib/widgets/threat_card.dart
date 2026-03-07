@@ -132,56 +132,55 @@ class ThreatCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                if (threat.threatType != 'file') ...[
-                  Expanded(
-                    flex: 1,
-                    child: SizedBox(
-                      height: 48,
-                      child: OutlinedButton.icon(
-                        onPressed: () => _handleTrustApp(context),
-                        icon: const Icon(Icons.verified_user_outlined, color: AppColors.primary, size: 20),
-                        label: const Text(
-                          'TRUST APP',
-                          style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 0.5),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: AppColors.primary.withValues(alpha: 0.5)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                      ),
-                    ),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton.icon(
+                onPressed: () => _handleUninstall(context),
+                icon: Icon(
+                  threat.threatType == 'file' ? Icons.delete_forever : Icons.delete_forever,
+                  color: Colors.white,
+                  size: 22,
+                ),
+                label: Text(
+                  threat.threatType == 'file' ? 'DELETE FILE' : 'UNINSTALL APP',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, letterSpacing: 1.2),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: severityColor,
+                  foregroundColor: Colors.white,
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+            if (threat.threatType != 'file') ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                     Provider.of<SecurityProvider>(context, listen: false).trustApp(threat.packageName);
+                     ScaffoldMessenger.of(context).showSnackBar(
+                       SnackBar(
+                         content: Text('${threat.appName} has been marked as Trusted.'),
+                         backgroundColor: Colors.green,
+                       ),
+                     );
+                  },
+                  icon: const Icon(Icons.verified_user, color: Colors.green, size: 22),
+                  label: const Text(
+                    'TRUST APP & IGNORE',
+                    style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w800, letterSpacing: 1.2),
                   ),
-                  const SizedBox(width: 8),
-                ],
-                Expanded(
-                  flex: threat.threatType != 'file' ? 1 : 2,
-                  child: SizedBox(
-                    height: 48,
-                    child: ElevatedButton.icon(
-                      onPressed: () => _handleUninstall(context),
-                      icon: Icon(
-                        threat.threatType == 'file' ? Icons.delete_forever : Icons.delete_forever,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                      label: Text(
-                        threat.threatType == 'file' ? 'DELETE FILE' : 'UNINSTALL',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, letterSpacing: 1.0, fontSize: 13),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: severityColor,
-                        foregroundColor: Colors.white,
-                        elevation: 2,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        padding: EdgeInsets.zero,
-                      ),
-                    ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppColors.divider),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
-              ],
-            )
+              ),
+            ],
           ],
         ),
       ),
@@ -217,33 +216,5 @@ class ThreatCard extends StatelessWidget {
            SnackBar(content: Text('Could not initiate uninstall: $e'), backgroundColor: AppColors.error),
         );
       }
-  }
-
-  void _handleTrustApp(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Trust this App?'),
-        content: Text('Are you sure you want to trust "${threat.appName}"? It will be removed from threats and ignored in future scans.'),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('CANCEL'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              Provider.of<SecurityProvider>(context, listen: false).trustApp(threat);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('${threat.appName} has been added to trusted apps.'), backgroundColor: AppColors.primary),
-              );
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
-            child: const Text('TRUST APP'),
-          ),
-        ],
-      ),
-    );
   }
 }
