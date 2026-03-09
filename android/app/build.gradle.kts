@@ -8,7 +8,7 @@ plugins {
 android {
     namespace = "com.ocsafe.ocsafe_cyberguard"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "29.0.14206865"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

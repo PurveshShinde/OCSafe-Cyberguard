@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:ocsafe_cyberguard/core/theme/app_theme.dart';
+import 'package:ocsafe_cyberguard/screens/auth/login_screen.dart';
 import 'package:ocsafe_cyberguard/screens/dashboard_content.dart';
 import 'package:ocsafe_cyberguard/screens/reports_screen.dart';
 import 'package:ocsafe_cyberguard/screens/profile_screen.dart';
@@ -165,8 +166,11 @@ class _HomeScreenState extends State<HomeScreen> {
             Icons.logout,
             'Sign Out',
             () {
-              Navigator.pop(context);
-              // Implement logout
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+                (route) => false,
+              );
             },
             isDestructive: true,
           ),

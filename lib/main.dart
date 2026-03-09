@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:ocsafe_cyberguard/core/theme/app_theme.dart';
 import 'package:ocsafe_cyberguard/providers/security_provider.dart';
-import 'package:ocsafe_cyberguard/screens/home_screen.dart';
+import 'package:ocsafe_cyberguard/screens/auth/login_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -54,7 +54,7 @@ class OcSafeApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         themeMode: ThemeMode.light,
         theme: AppTheme.theme,
-        home: const HomeScreen(),
+        home: const LoginScreen(),
       ),
     );
   }
