@@ -1,7 +1,18 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Wrapper around SharedPreferences for app settings.
+/// Centralized preferences manager for CyberGuard.
+/// Uses caching + singleton for faster access.
 class PreferencesService {
+  static final PreferencesService _instance = PreferencesService._internal();
+
+  factory PreferencesService() {
+    return _instance;
+  }
+
+  PreferencesService._internal();
+
+  late SharedPreferences _prefs;
+
   static const String _keyRealtimeProtection = 'realtime_protection';
   static const String _keySafeBrowsing = 'safe_browsing';
   static const String _keyAutoScan = 'auto_scan';
@@ -9,89 +20,79 @@ class PreferencesService {
   static const String _keyUserEmail = 'user_email';
   static const String _keyTrustedApps = 'trusted_apps';
 
-  SharedPreferences? _prefs;
+  List<String> _trustedAppsCache = [];
 
-  Future<SharedPreferences> get _preferences async {
-    _prefs ??= await SharedPreferences.getInstance();
-    return _prefs!;
+  /// Initialize preferences once at app startup.
+  Future<void> init() async {
+    _prefs = await SharedPreferences.getInstance();
+    _trustedAppsCache = _prefs.getStringList(_keyTrustedApps) ?? [];
   }
 
-  // --- Security Settings ---
+  // ---------------- Security Settings ----------------
 
-  Future<bool> getRealtimeProtection() async {
-    final prefs = await _preferences;
-    return prefs.getBool(_keyRealtimeProtection) ?? true;
+  bool getRealtimeProtection() {
+    return _prefs.getBool(_keyRealtimeProtection) ?? true;
   }
 
   Future<void> setRealtimeProtection(bool value) async {
-    final prefs = await _preferences;
-    await prefs.setBool(_keyRealtimeProtection, value);
+    await _prefs.setBool(_keyRealtimeProtection, value);
   }
 
-  Future<bool> getSafeBrowsing() async {
-    final prefs = await _preferences;
-    return prefs.getBool(_keySafeBrowsing) ?? true;
+  bool getSafeBrowsing() {
+    return _prefs.getBool(_keySafeBrowsing) ?? true;
   }
 
   Future<void> setSafeBrowsing(bool value) async {
-    final prefs = await _preferences;
-    await prefs.setBool(_keySafeBrowsing, value);
+    await _prefs.setBool(_keySafeBrowsing, value);
   }
 
-  Future<bool> getAutoScan() async {
-    final prefs = await _preferences;
-    return prefs.getBool(_keyAutoScan) ?? false;
+  bool getAutoScan() {
+    return _prefs.getBool(_keyAutoScan) ?? false;
   }
 
   Future<void> setAutoScan(bool value) async {
-    final prefs = await _preferences;
-    await prefs.setBool(_keyAutoScan, value);
+    await _prefs.setBool(_keyAutoScan, value);
   }
 
-  // --- User Profile ---
+  // ---------------- User Profile ----------------
 
-  Future<String> getUserName() async {
-    final prefs = await _preferences;
-    return prefs.getString(_keyUserName) ?? 'User';
+  String getUserName() {
+    return _prefs.getString(_keyUserName) ?? 'User';
   }
 
   Future<void> setUserName(String value) async {
-    final prefs = await _preferences;
-    await prefs.setString(_keyUserName, value);
+    await _prefs.setString(_keyUserName, value);
   }
 
-  Future<String> getUserEmail() async {
-    final prefs = await _preferences;
-    return prefs.getString(_keyUserEmail) ?? '';
+  String getUserEmail() {
+    return _prefs.getString(_keyUserEmail) ?? '';
   }
 
   Future<void> setUserEmail(String value) async {
-    final prefs = await _preferences;
-    await prefs.setString(_keyUserEmail, value);
+    await _prefs.setString(_keyUserEmail, value);
   }
 
-  // --- Trusted Apps ---
+  // ---------------- Trusted Apps ----------------
 
-  Future<List<String>> getTrustedApps() async {
-    final prefs = await _preferences;
-    return prefs.getStringList(_keyTrustedApps) ?? [];
+  List<String> getTrustedApps() {
+    return List.unmodifiable(_trustedAppsCache);
   }
 
   Future<void> addTrustedApp(String packageName) async {
-    final prefs = await _preferences;
-    final list = prefs.getStringList(_keyTrustedApps) ?? [];
-    if (!list.contains(packageName)) {
-      list.add(packageName);
-      await prefs.setStringList(_keyTrustedApps, list);
-    }
+    if (_trustedAppsCache.contains(packageName)) return;
+
+    _trustedAppsCache.add(packageName);
+    await _prefs.setStringList(_keyTrustedApps, _trustedAppsCache);
   }
 
   Future<void> removeTrustedApp(String packageName) async {
-    final prefs = await _preferences;
-    final list = prefs.getStringList(_keyTrustedApps) ?? [];
-    if (list.contains(packageName)) {
-      list.remove(packageName);
-      await prefs.setStringList(_keyTrustedApps, list);
-    }
+    if (!_trustedAppsCache.contains(packageName)) return;
+
+    _trustedAppsCache.remove(packageName);
+    await _prefs.setStringList(_keyTrustedApps, _trustedAppsCache);
+  }
+
+  bool isTrustedApp(String packageName) {
+    return _trustedAppsCache.contains(packageName);
   }
 }

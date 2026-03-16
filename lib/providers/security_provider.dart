@@ -13,8 +13,6 @@ import 'package:ocsafe_cyberguard/services/database_service.dart';
 import 'package:ocsafe_cyberguard/services/threat_intel.dart';
 import 'package:ocsafe_cyberguard/services/signature_scanner.dart';
 import 'package:ocsafe_cyberguard/services/threat_analyzer.dart';
-import 'package:ocsafe_cyberguard/services/threat_intel.dart';
-import 'package:ocsafe_cyberguard/services/signature_scanner.dart';
 import 'package:ocsafe_cyberguard/services/preferences_service.dart';
 import 'package:ocsafe_cyberguard/services/notification_service.dart';
 import 'package:ocsafe_cyberguard/services/safe_browsing_service.dart';
@@ -36,12 +34,12 @@ class SecurityProvider extends ChangeNotifier {
   bool _isScanning = false;
   String _scanStage = '';
   bool _isFullScan = false;
-  
+
   ScanResult? _lastScanResult;
   List<Threat> _threats = [];
   List<ActivityLog> _activityLogs = [];
   List<ScanResult> _scanHistory = [];
-  
+
   DeviceHealthData? _deviceData;
   final Set<String> _notifiedPackages = {};
   List<String> _trustedApps = [];
@@ -77,11 +75,11 @@ class SecurityProvider extends ChangeNotifier {
     await loadDeviceInfo();
     await loadHistory();
     await loadActivityLogs();
-    
+
     // Initialize Local Notifications
     await _notificationService.init();
     await _notificationService.requestPermission();
-    
+
     // Setup Real-time Malware Installation Listener
     _setupRealtimeListener();
   }
@@ -95,13 +93,14 @@ class SecurityProvider extends ChangeNotifier {
   void _setupRealtimeListener() {
     // Listen for installs and uninstalls to update the UI & memory state
     DeviceApps.listenToAppsChanges().listen((ApplicationEvent event) async {
-      if (event.event == ApplicationEventType.installed || event.event == ApplicationEventType.updated) {
+      if (event.event == ApplicationEventType.installed ||
+          event.event == ApplicationEventType.updated) {
         if (!_realtimeProtection) return;
-        
+
         // Skip scanning if the app is trusted
         final packageName = event.packageName;
         if (_trustedApps.contains(packageName)) return;
-        
+
         // Fetch app parameters for accurate threat analysis
         final appInfo = await _appScanner.fetchAppWithPermissions(packageName);
         if (appInfo != null) {
@@ -115,11 +114,10 @@ class SecurityProvider extends ChangeNotifier {
               'Real-Time Detection: ${threat.appName} flagged as ${threat.riskLevel} risk! Reason: ${threat.reasons.first}',
               ActivityType.threat,
             );
-            
+
             // NOTE: We don't need to trigger _notificationService here because
-            // the Native PackageReceiver exclusively triggers the Headless isolate 
+            // the Native PackageReceiver exclusively triggers the Headless isolate
             // for ALL push notifications, preventing duplicate notifications.
-            
           } else {
             await _logActivity(
               'Real-Time Scanner: ${appInfo.appName} installed (Safe)',
@@ -133,16 +131,22 @@ class SecurityProvider extends ChangeNotifier {
       } else if (event.event == ApplicationEventType.uninstalled) {
         // If an app was uninstalled, check if it was currently flagged as a threat
         final initialLength = _threats.length;
-        
+
         // Find the threat to get its appName before removing it
-        final resolvedThreat = _threats.where((t) => t.packageName == event.packageName).firstOrNull;
+        final resolvedThreat = _threats
+            .where((t) => t.packageName == event.packageName)
+            .firstOrNull;
         if (resolvedThreat != null) {
-          _notificationService.cancelWarningNotification(resolvedThreat.appName);
+          _notificationService.cancelWarningNotification(
+            resolvedThreat.appName,
+          );
         }
-        
+
         _threats.removeWhere((t) => t.packageName == event.packageName);
-        _notifiedPackages.remove(event.packageName); // Allow user to be notified again if they reinstall the malware
-        
+        _notifiedPackages.remove(
+          event.packageName,
+        ); // Allow user to be notified again if they reinstall the malware
+
         // Remove from database and history memory
         await _databaseService.removeThreatsByPackageName(event.packageName);
         for (var scan in _scanHistory) {
@@ -150,7 +154,7 @@ class SecurityProvider extends ChangeNotifier {
         }
 
         if (_threats.length < initialLength) {
-           await _logActivity(
+          await _logActivity(
             'Threat Removed: ${event.packageName} was successfully uninstalled.',
             ActivityType.protection,
           );
@@ -164,7 +168,7 @@ class SecurityProvider extends ChangeNotifier {
 
   Future<void> scanSingleAppHeadless(String packageName) async {
     if (!_realtimeProtection) return;
-    
+
     // Skip if trusted
     if (_trustedApps.contains(packageName)) {
       print('DEBUG: App $packageName is trusted. Bypassing scan.');
@@ -176,10 +180,12 @@ class SecurityProvider extends ChangeNotifier {
     // Attempt to fetch app info with a few retries as the OS might take a moment to manifest the new app fully
     AppInfo? appInfo;
     for (int i = 0; i < 3; i++) {
-        appInfo = await _appScanner.fetchAppWithPermissions(packageName);
-        if (appInfo != null) break;
-        print('DEBUG: AppInfo not found for $packageName, retrying in 2s... (Attempt ${i+1})');
-        await Future.delayed(const Duration(seconds: 2));
+      appInfo = await _appScanner.fetchAppWithPermissions(packageName);
+      if (appInfo != null) break;
+      print(
+        'DEBUG: AppInfo not found for $packageName, retrying in 2s... (Attempt ${i + 1})',
+      );
+      await Future.delayed(const Duration(seconds: 2));
     }
 
     if (appInfo != null) {
@@ -193,10 +199,10 @@ class SecurityProvider extends ChangeNotifier {
           ActivityType.threat,
         );
         await _notificationService.showWarningNotification(
-            appName: threat.appName,
-            riskLevel: threat.riskLevel,
-            reason: threat.reasons.first,
-            packageName: threat.packageName,
+          appName: threat.appName,
+          riskLevel: threat.riskLevel,
+          reason: threat.reasons.first,
+          packageName: threat.packageName,
         );
       } else {
         print('DEBUG: App is safe.');
@@ -211,20 +217,23 @@ class SecurityProvider extends ChangeNotifier {
   void _updateScore() {
     int highRiskApps = _threats.where((t) => t.riskLevel == 'HIGH').length;
     int mediumRiskApps = _threats.where((t) => t.riskLevel == 'MEDIUM').length;
-    int dangerousCount = _threats.where((t) => t.permissionsRequested.isNotEmpty).length;
+    int dangerousCount = _threats
+        .where((t) => t.permissionsRequested.isNotEmpty)
+        .length;
 
-    int score = 100 
-                - (highRiskApps * 20) 
-                - (mediumRiskApps * 10) 
-                - (dangerousCount * 5) 
-                - (_realtimeProtection ? 0 : 20);
+    int score =
+        100 -
+        (highRiskApps * 20) -
+        (mediumRiskApps * 10) -
+        (dangerousCount * 5) -
+        (_realtimeProtection ? 0 : 20);
 
     _securityScore = score.clamp(0, 100);
   }
 
   void removeApkThreat(Threat threat) async {
     _threats.removeWhere((t) => t.packageName == threat.packageName);
-    
+
     // Persist removal
     await _databaseService.removeThreatsByPackageName(threat.packageName);
     for (var scan in _scanHistory) {
@@ -243,16 +252,16 @@ class SecurityProvider extends ChangeNotifier {
   void removeAppThreat(String packageName) async {
     final initialLength = _threats.length;
     _threats.removeWhere((t) => t.packageName == packageName);
-    
+
     if (_threats.length < initialLength) {
-       // Persist removal
-       await _databaseService.removeThreatsByPackageName(packageName);
-       for (var scan in _scanHistory) {
-         scan.threats.removeWhere((t) => t.packageName == packageName);
-       }
-       
-       _updateScore();
-       notifyListeners();
+      // Persist removal
+      await _databaseService.removeThreatsByPackageName(packageName);
+      for (var scan in _scanHistory) {
+        scan.threats.removeWhere((t) => t.packageName == packageName);
+      }
+
+      _updateScore();
+      notifyListeners();
     }
   }
 
@@ -264,18 +273,18 @@ class SecurityProvider extends ChangeNotifier {
 
     // 2. Remove from active threats
     _threats.removeWhere((t) => t.packageName == threat.packageName);
-    
+
     // 3. Remove from history memory
     for (var scan in _scanHistory) {
       scan.threats.removeWhere((t) => t.packageName == threat.packageName);
     }
-    
+
     // 4. Remove from database history
     await _databaseService.removeThreatsByPackageName(threat.packageName);
-    
+
     // 5. Cancel any pending notification for it
     await _notificationService.cancelWarningNotification(threat.appName);
-    
+
     // 6. Recalculate security score explicitly
     _updateScore();
 
@@ -284,7 +293,7 @@ class SecurityProvider extends ChangeNotifier {
       'User marked ${threat.appName} as Trusted. It will be ignored in future scans.',
       ActivityType.protection,
     );
-    
+
     notifyListeners();
   }
 
@@ -299,10 +308,10 @@ class SecurityProvider extends ChangeNotifier {
   /// If false, scans installed apps only (Limited Scan).
   Future<void> runScan() async {
     if (_isScanning) return; // prevent multiple scans
-    
+
     _isScanning = true;
     _threats.clear();
-    
+
     try {
       // 1. Scan installed apps
       _scanStage = 'Scanning installed apps...';
@@ -316,17 +325,19 @@ class SecurityProvider extends ChangeNotifier {
 
       final RootIsolateToken token = RootIsolateToken.instance!;
       final List<AppInfo> apps = await compute(fetchAllAppsBackground, token);
-      
+
       // Filter out trusted applications from the scan queue
       apps.removeWhere((app) => _trustedApps.contains(app.packageName));
-
 
       // 3. Suspicious packages analysis + threat detection (in background isolate)
       _scanStage = 'Detecting malware & suspicious packages...';
       notifyListeners();
       await Future.delayed(const Duration(milliseconds: 800));
 
-      List<Threat> detectedThreats = await compute(runThreatAnalysisBackground, apps);
+      List<Threat> detectedThreats = await compute(
+        runThreatAnalysisBackground,
+        apps,
+      );
 
       // 4. Scan for suspicious files across entire device storage (APKs, ZIPs, DEX, etc.)
       //    Only runs in Full Scan mode (when storage permission is granted).
@@ -335,9 +346,12 @@ class SecurityProvider extends ChangeNotifier {
         _scanStage = 'Scanning whole device storage for malicious files...';
         notifyListeners();
         await Future.delayed(const Duration(milliseconds: 800));
-        
+
         filePaths = await _apkScanner.scanForSuspiciousFiles();
-        final fileThreats = await compute(evaluateSuspiciousFilesBackground, filePaths);
+        final fileThreats = await compute(
+          evaluateSuspiciousFilesBackground,
+          filePaths,
+        );
         detectedThreats.addAll(fileThreats);
       } else {
         _scanStage = 'Limited scan — skipping storage (no permission)...';
@@ -353,7 +367,9 @@ class SecurityProvider extends ChangeNotifier {
       await Future.delayed(const Duration(milliseconds: 800));
 
       final seen = <String>{};
-      final uniqueThreats = detectedThreats.where((t) => seen.add(t.packageName)).toList();
+      final uniqueThreats = detectedThreats
+          .where((t) => seen.add(t.packageName))
+          .toList();
 
       _threats = uniqueThreats;
       _updateScore();
@@ -377,7 +393,6 @@ class SecurityProvider extends ChangeNotifier {
         '$modeLabel completed: ${apps.length} apps scanned, ${filePaths.length} files checked, ${_threats.length} threats found',
         ActivityType.scan,
       );
-
     } catch (e) {
       await _logActivity('Scan failed: $e', ActivityType.scan);
     } finally {
@@ -404,11 +419,17 @@ class SecurityProvider extends ChangeNotifier {
   Future<void> toggleSafeBrowsing(bool value) async {
     _safeBrowsing = value;
     await _preferencesService.setSafeBrowsing(value);
-    
+
     if (value) {
-      await _logActivity('Safe Browsing protection enabled', ActivityType.protection);
+      await _logActivity(
+        'Safe Browsing protection enabled',
+        ActivityType.protection,
+      );
     } else {
-      await _logActivity('Safe Browsing protection disabled', ActivityType.protection);
+      await _logActivity(
+        'Safe Browsing protection disabled',
+        ActivityType.protection,
+      );
     }
     notifyListeners();
   }
@@ -428,7 +449,8 @@ class SecurityProvider extends ChangeNotifier {
       await _notificationService.showSafeBrowsingNotification(
         id: url.hashCode,
         title: '🛑 Malicious Site Detected!',
-        body: 'Alert: ${threat.domain} is flagged as ${threat.threatType}. Avoid sharing any data.',
+        body:
+            'Alert: ${threat.domain} is flagged as ${threat.threatType}. Avoid sharing any data.',
       );
     }
   }

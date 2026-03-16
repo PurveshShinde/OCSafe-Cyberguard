@@ -9,14 +9,31 @@ List<String> scanDirectoriesBackground(Map<String, dynamic> params) {
   final List<String> dirsToScan = params['dirsToScan'];
   final List<String> extensions = params['extensions'];
   final int maxDepth = params['maxDepth'];
+
   final List<String> foundFiles = [];
 
   for (final dirPath in dirsToScan) {
-    _scanDirectoryBackgroundSync(dirPath, foundFiles, extensions, depth: 0, maxDepth: maxDepth);
+    _scanDirectoryBackgroundSync(
+      dirPath,
+      foundFiles,
+      extensions,
+      depth: 0,
+      maxDepth: maxDepth,
+    );
   }
 
   return foundFiles;
 }
+
+const int _maxFilesPerDirectory = 2000;
+const int _maxFileSize = 500 * 1024 * 1024; // 500MB
+
+const List<String> _ignoredDirectoryNames = [
+  'cache',
+  'temp',
+  'tmp',
+  'thumbnails',
+];
 
 void _scanDirectoryBackgroundSync(
   String dirPath,
@@ -30,105 +47,117 @@ void _scanDirectoryBackgroundSync(
   final dir = Directory(dirPath);
   if (!dir.existsSync()) return;
 
+  int scannedFiles = 0;
+
   try {
     final entities = dir.listSync(recursive: false, followLinks: false);
+
     for (final entity in entities) {
+      if (scannedFiles > _maxFilesPerDirectory) break;
+
       try {
         if (entity is File) {
-          final lowerPath = entity.path.toLowerCase();
+          scannedFiles++;
+
+          if (entity.lengthSync() > _maxFileSize) continue;
+
+          final path = entity.path;
+          final lowerPath = path.toLowerCase();
+
           if (extensions.any((ext) => lowerPath.endsWith(ext))) {
-            foundFiles.add(entity.path);
+            foundFiles.add(path);
           }
         } else if (entity is Directory) {
           final name = entity.path.split('/').last.toLowerCase();
+
           if (name == 'proc' || name == 'sys' || name == 'dev') continue;
-          _scanDirectoryBackgroundSync(entity.path, foundFiles, extensions, depth: depth + 1, maxDepth: maxDepth);
+
+          if (_ignoredDirectoryNames.contains(name)) continue;
+
+          _scanDirectoryBackgroundSync(
+            entity.path,
+            foundFiles,
+            extensions,
+            depth: depth + 1,
+            maxDepth: maxDepth,
+          );
         }
-      } catch (_) {
-      }
+      } catch (_) {}
     }
-  } catch (_) {
-  }
+  } catch (_) {}
 }
 
 class ApkScanner {
-  /// Suspicious file extensions to flag.
   static const List<String> _suspiciousExtensions = [
-    '.apk', '.xapk', '.apks', '.apkm',
-    '.zip', '.rar', '.7z',
-    '.dex', '.jar', '.so',
+    '.apk',
+    '.xapk',
+    '.apks',
+    '.apkm',
+    '.zip',
+    '.rar',
+    '.7z',
+    '.dex',
+    '.jar',
+    '.so',
   ];
 
-  /// Root directories to scan on Android.
-  /// NOTE: /sdcard is a symlink to /storage/emulated/0 — do NOT include both
-  /// or every file will be detected twice.
   static const List<String> _rootDirectoriesToScan = [
     '/storage/emulated/0',
-    '/data/local/tmp',         // Commonly used by ADB/sideload
+    '/data/local/tmp',
   ];
 
-  /// Directories to always include even if permission is restrictive.
   static const List<String> _priorityDirectories = [
     '/storage/emulated/0/Download',
     '/storage/emulated/0/Downloads',
     '/storage/emulated/0/Documents',
     '/storage/emulated/0/DCIM',
     '/storage/emulated/0/Pictures',
-    '/storage/emulated/0/Android/data',
-    '/storage/emulated/0/Android/obb',
-    '/storage/emulated/0/Android/media',
     '/storage/emulated/0/Movies',
     '/storage/emulated/0/WhatsApp/Media',
     '/storage/emulated/0/WhatsApp/Documents',
     '/storage/emulated/0/Telegram',
   ];
 
-  /// Maximum recursion depth for directory scanning.
   static const int _maxDepth = 6;
 
-  /// Scans the entire accessible device storage for suspicious files.
-  /// Returns a list of absolute paths to found suspicious files.
-  /// NOTE: Permission must be requested BEFORE calling this (via the UI layer).
   Future<List<String>> scanForSuspiciousFiles() async {
-    final List<String> foundFiles = [];
-
-    // Check if we already have permission — do NOT request here (this is called
-    // mid-scan from a background context; permission would fail silently).
     final bool hasFullAccess = await hasStoragePermission();
 
     final List<String> dirsToScan = hasFullAccess
         ? _rootDirectoriesToScan
         : _priorityDirectories;
 
-    // Run the directory scanning on a background thread using compute.
-    // We pass the parameters inside a Map.
-    final List<String> backgroundFoundFiles = await compute(scanDirectoriesBackground, {
-      'dirsToScan': dirsToScan,
-      'extensions': _suspiciousExtensions,
-      'maxDepth': _maxDepth,
-    });
-    
-    foundFiles.addAll(backgroundFoundFiles);
+    final List<String> backgroundFoundFiles =
+        await compute(scanDirectoriesBackground, {
+          'dirsToScan': dirsToScan,
+          'extensions': _suspiciousExtensions,
+          'maxDepth': _maxDepth,
+        });
 
-    // Deduplicate paths (guard against any remaining symlink duplicates)
-    return foundFiles.toSet().toList();
+    return backgroundFoundFiles.toSet().toList();
   }
 
-  /// Native method channel for storage permission — bypasses permission_handler
-  /// which doesn't work reliably on Android 16+ for MANAGE_EXTERNAL_STORAGE.
-  static const _storageChannel = MethodChannel('com.ocsafe.cyberguard/storage_permission');
+  static const _storageChannel = MethodChannel(
+    'com.ocsafe.cyberguard/storage_permission',
+  );
 
-  /// Checks current storage permission status WITHOUT requesting it.
-  /// Returns true if the app already has "All Files Access" (Android 11+)
-  /// or READ_EXTERNAL_STORAGE (Android 9/10).
   Future<bool> hasStoragePermission() async {
     if (!Platform.isAndroid) return false;
+
     try {
       final androidInfo = await DeviceInfoPlugin().androidInfo;
+
       if (androidInfo.version.sdkInt >= 30) {
-        // Calls Environment.isExternalStorageManager() natively
-        final bool granted = await _storageChannel.invokeMethod<bool>('check_all_files_access') ?? false;
-        debugPrint('[ApkScanner] hasStoragePermission (API${androidInfo.version.sdkInt}): $granted');
+        final bool granted =
+            await _storageChannel.invokeMethod<bool>(
+              'check_all_files_access',
+            ) ??
+            false;
+
+        debugPrint(
+          '[ApkScanner] hasStoragePermission (API${androidInfo.version.sdkInt}): $granted',
+        );
+
         return granted;
       } else {
         return await Permission.storage.isGranted;
@@ -139,29 +168,34 @@ class ApkScanner {
     }
   }
 
-  /// Opens the "All Files Access" settings page for this app (Android 11+)
-  /// or shows the standard storage permission dialog (Android 9/10).
-  /// Returns `true` immediately if already granted, `false` after launching Settings.
-  /// The caller is responsible for polling [hasStoragePermission] afterwards.
   Future<bool> requestStoragePermission() async {
     if (!Platform.isAndroid) return false;
+
     try {
       final androidInfo = await DeviceInfoPlugin().androidInfo;
       final sdkInt = androidInfo.version.sdkInt;
+
       debugPrint('[ApkScanner] requestStoragePermission (API$sdkInt)');
 
       if (sdkInt >= 30) {
-        // Uses Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION natively.
-        // Returns true instantly if already granted, false after opening Settings.
         final bool alreadyGranted =
-            await _storageChannel.invokeMethod<bool>('request_all_files_access') ?? false;
-        debugPrint('[ApkScanner] request_all_files_access returned: $alreadyGranted');
+            await _storageChannel.invokeMethod<bool>(
+              'request_all_files_access',
+            ) ??
+            false;
+
+        debugPrint(
+          '[ApkScanner] request_all_files_access returned: $alreadyGranted',
+        );
+
         return alreadyGranted;
       } else {
         PermissionStatus status = await Permission.storage.status;
+
         if (!status.isGranted) {
           status = await Permission.storage.request();
         }
+
         return status.isGranted;
       }
     } catch (e) {
@@ -170,4 +204,3 @@ class ApkScanner {
     }
   }
 }
-

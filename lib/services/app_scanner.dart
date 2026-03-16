@@ -10,17 +10,17 @@ Future<List<AppInfo>> fetchAllAppsBackground(RootIsolateToken token) async {
 }
 
 class AppScanner {
-  /// Fetches the list of installed applications via device_apps.
+  /// Fetch raw installed apps
   Future<List<Application>> fetchRawInstalledApps() async {
     return await DeviceApps.getInstalledApplications(
       includeSystemApps: true,
       includeAppIcons: false,
+      onlyAppsWithLaunchIntent: false,
     );
   }
 
-  /// Maps a native Application to our AppInfo domain model.
-  /// Fetches permissions individually for each app.
-  AppInfo mapToAppInfo(Application app, {bool hasLaunchIntent = true}) {
+  /// Maps Application → AppInfo
+  AppInfo mapToAppInfo(Application app, {required bool hasLaunchIntent}) {
     final installSource = _safeInstallerPackage(app);
     final permissions = _safePermissions(app);
 
@@ -35,46 +35,60 @@ class AppScanner {
     );
   }
 
-  /// Fetches an individual app WITH permissions (for real-time detection).
+  /// Fetch one app with permissions
   Future<AppInfo?> fetchAppWithPermissions(String packageName) async {
     final app = await DeviceApps.getApp(packageName, true);
+
     if (app == null) return null;
-    return mapToAppInfo(app);
+
+    final hasLaunchIntent = app is ApplicationWithIcon;
+
+    return mapToAppInfo(app, hasLaunchIntent: hasLaunchIntent);
   }
 
-  /// Fetches all installed apps WITH permissions for deep scan.
+  /// Fetch all apps with permissions
   Future<List<AppInfo>> fetchAllAppsWithPermissions() async {
-    final rawApps = await DeviceApps.getInstalledApplications(
-      includeSystemApps: true,
-      includeAppIcons: false,
-      onlyAppsWithLaunchIntent: false,
-    );
+    final rawApps = await fetchRawInstalledApps();
 
-    final launchableAppsRaw = await DeviceApps.getInstalledApplications(
-      includeSystemApps: true,
-      includeAppIcons: false,
-      onlyAppsWithLaunchIntent: true,
-    );
-    final launchablePackages = launchableAppsRaw.map((e) => e.packageName).toSet();
+    final futures = rawApps.map((raw) async {
+      try {
+        final appWithPerms = await DeviceApps.getApp(raw.packageName, true);
 
-    final List<AppInfo> result = [];
-    for (final raw in rawApps) {
-      final bool hasLaunch = launchablePackages.contains(raw.packageName);
-      // Re-fetch each app with permissions: true to get requestedPermissions
-      final appWithPerms = await DeviceApps.getApp(raw.packageName, true);
-      if (appWithPerms != null) {
-        result.add(mapToAppInfo(appWithPerms, hasLaunchIntent: hasLaunch));
-      } else {
-        result.add(mapToAppInfo(raw, hasLaunchIntent: hasLaunch));
+        if (appWithPerms != null) {
+          final hasLaunchIntent = appWithPerms is ApplicationWithIcon;
+
+          return mapToAppInfo(appWithPerms, hasLaunchIntent: hasLaunchIntent);
+        }
+
+        final hasLaunchIntent = raw is ApplicationWithIcon;
+
+        return mapToAppInfo(raw, hasLaunchIntent: hasLaunchIntent);
+      } catch (_) {
+        final hasLaunchIntent = raw is ApplicationWithIcon;
+
+        return mapToAppInfo(raw, hasLaunchIntent: hasLaunchIntent);
       }
-    }
-    return result;
+    });
+
+    final apps = await Future.wait(futures);
+
+    /// Filter invalid packages
+    return apps.where((app) {
+      if (app.packageName.isEmpty) return false;
+      if (app.packageName == 'android') return false;
+      return true;
+    }).toList();
   }
 
   String? _safeInstallerPackage(Application app) {
     try {
       final d = app as dynamic;
       final val = d.installerPackageName as String?;
+
+      if (val == null) return null;
+
+      if (val.contains('vending')) return 'play_store';
+
       return val;
     } catch (_) {
       return null;
@@ -83,12 +97,14 @@ class AppScanner {
 
   List<String> _safePermissions(Application app) {
     try {
-      // ApplicationWithPermissions exposes requestedPermissions
       final d = app as dynamic;
+
       final perms = d.requestedPermissions;
+
       if (perms is List) {
         return perms.map((e) => e.toString()).toList();
       }
+
       return [];
     } catch (_) {
       return [];

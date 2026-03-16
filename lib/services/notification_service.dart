@@ -15,24 +15,32 @@ class NotificationService {
 
   bool _isInitialized = false;
 
+  static const MethodChannel _nativeChannel = MethodChannel(
+    'com.ocsafe.cyberguard/background',
+  );
+
   Future<void> init() async {
     if (_isInitialized) return;
 
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    const InitializationSettings initializationSettings = InitializationSettings(
-      android: initializationSettingsAndroid,
-    );
+    const InitializationSettings initializationSettings =
+        InitializationSettings(android: initializationSettingsAndroid);
 
     await flutterLocalNotificationsPlugin.initialize(
       settings: initializationSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) async {
         if (response.actionId == 'UNINSTALL' && response.payload != null) {
           try {
-            await UninstallService.uninstallApp(response.payload!);
+            final packageName = response.payload!;
+
+            await UninstallService.uninstallApp(packageName);
+
+            // Cancel malware notification after uninstall
+            await cancelWarningNotification(packageName);
           } catch (e) {
-            debugPrint('Failed to trigger uninstall: $e');
+            debugPrint('Uninstall action failed: $e');
           }
         }
       },
@@ -41,12 +49,16 @@ class NotificationService {
     _isInitialized = true;
   }
 
+  /// Request notification permission (Android 13+)
   Future<void> requestPermission() async {
-    await Permission.notification.request();
+    try {
+      await Permission.notification.request();
+    } catch (e) {
+      debugPrint('Notification permission request failed: $e');
+    }
   }
 
-  static const MethodChannel _nativeChannel = MethodChannel('com.ocsafe.cyberguard/background');
-
+  /// Show malware warning notification via native Android code
   Future<void> showWarningNotification({
     required String appName,
     required String riskLevel,
@@ -65,40 +77,43 @@ class NotificationService {
     }
   }
 
-  Future<void> cancelWarningNotification(String appName) async {
+  /// Cancel malware warning notification
+  Future<void> cancelWarningNotification(String packageName) async {
     try {
       await _nativeChannel.invokeMethod('cancel_malware_notification', {
-        'app_name': appName,
+        'package_name': packageName,
       });
     } catch (e) {
-      debugPrint('Failed to cancel native malware notification: $e');
+      debugPrint('Failed to cancel malware notification: $e');
     }
   }
 
+  /// Safe browsing alert
   Future<void> showSafeBrowsingNotification({
     required int id,
     required String title,
     required String body,
   }) async {
-    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+    const AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
-      'safe_browsing_channel',
-      'Safe Browsing Alerts',
-      channelDescription: 'Alerts for malicious or phishing websites',
-      importance: Importance.high,
-      priority: Priority.high,
-      color: Color(0xFFFB8C00), // Orange color for warnings
-      ticker: 'ticker',
-      icon: '@mipmap/ic_launcher',
+          'safe_browsing_channel',
+          'Safe Browsing Alerts',
+          channelDescription: 'Alerts for malicious or phishing websites',
+          importance: Importance.high,
+          priority: Priority.high,
+          color: Color(0xFFFB8C00),
+          icon: '@mipmap/ic_launcher',
+        );
+
+    const NotificationDetails notificationDetails = NotificationDetails(
+      android: androidDetails,
     );
-    const NotificationDetails platformChannelSpecifics =
-        NotificationDetails(android: androidPlatformChannelSpecifics);
-    
+
     await flutterLocalNotificationsPlugin.show(
       id: id,
       title: title,
       body: body,
-      notificationDetails: platformChannelSpecifics,
+      notificationDetails: notificationDetails,
     );
   }
 }

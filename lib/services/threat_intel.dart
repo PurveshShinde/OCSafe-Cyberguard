@@ -1,25 +1,40 @@
 class ThreatIntel {
+  /// Known malware package identifiers
   static const Set<String> maliciousPackageNames = {
     'com.fake.bank',
     'com.android.spy',
     'com.trojan.dropper',
-    // ... add more as needed
   };
 
+  /// Trusted system packages
   static const Set<String> trustedPackages = {
     'com.android.systemui',
     'com.google.android.gms',
     'com.android.vending',
-    // ... add more as needed
   };
 
+  /// Trusted namespaces (system/OEM)
+  static const List<String> trustedNamespaces = [
+    'com.android.',
+    'com.google.',
+    'com.samsung.',
+    'com.oneplus.',
+    'com.oplus.',
+    'com.coloros.',
+    'com.heytap.',
+    'com.miui.',
+    'com.xiaomi.',
+    'com.huawei.',
+  ];
+
+  /// Dangerous permissions commonly abused by malware
   static const Set<String> suspiciousPermissions = {
     'android.permission.SYSTEM_ALERT_WINDOW',
     'android.permission.BIND_ACCESSIBILITY_SERVICE',
     'android.permission.BIND_DEVICE_ADMIN',
-    // ... add more as needed
   };
 
+  /// Suspicious namespace patterns
   static const Set<String> suspiciousNamespaces = {
     'update.service',
     'system.update',
@@ -29,22 +44,30 @@ class ThreatIntel {
     'monitor',
     'spy',
     'track',
-    // ... add more as needed
   };
 
-  static const List<String> safeHiddenPackages = [
-    // Core Google/Android
+  /// Fake system naming patterns
+  static const Set<String> fakeSystemPatterns = {
+    'android.system',
+    'system.service',
+    'google.security',
+    'android.update.service',
+  };
+
+  /// Hidden packages that are safe system components
+  static const Set<String> safeHiddenPackages = {
+    /// Core Google / Android
     'com.google.android.gms',
     'com.android.systemui',
     'com.android.vending',
     'com.google.android.gsf',
     'com.google.android.ext.services',
-    'com.google.android.as', // Android System Intelligence
+    'com.google.android.as',
     'com.google.android.networkstack.tethering',
     'com.android.keychain',
     'com.android.settings',
 
-    // Common OEMs (OnePlus, Samsung, Xiaomi, etc.)
+    /// OEM packages
     'com.oneplus.widget',
     'net.oneplus.widget',
     'com.oneplus.security',
@@ -58,39 +81,64 @@ class ThreatIntel {
     'com.coloros.safecenter',
     'com.heytap.mcs',
 
-    // Other System level components
+    /// Android services
     'com.android.providers.media.module',
     'com.android.providers.telephony',
     'com.android.bluetooth',
     'com.android.nfc',
     'com.android.certinstaller',
-    
-    // Media / Companion Apps mentioned by user
+
+    /// System utilities
     'com.android.soundrecorder',
     'com.heytap.speechassist',
     'com.google.android.setupwizard',
-    'com.coloros.lockassistant', // Lock screen magazine
-    'com.heytap.pictorial', // Lock screen magazine alternative
-  ];
+    'com.coloros.lockassistant',
+    'com.heytap.pictorial',
+  };
+
+  static String _normalize(String package) {
+    return package.toLowerCase().trim();
+  }
 
   static bool isMaliciousPackage(String packageName) {
-    return maliciousPackageNames.contains(packageName);
+    return maliciousPackageNames.contains(_normalize(packageName));
   }
 
   static bool isTrustedPackage(String packageName) {
-    return trustedPackages.contains(packageName);
+    return trustedPackages.contains(_normalize(packageName));
+  }
+
+  static bool isTrustedNamespace(String packageName) {
+    final pkg = _normalize(packageName);
+
+    for (final ns in trustedNamespaces) {
+      if (pkg.startsWith(ns)) return true;
+    }
+
+    return false;
   }
 
   static bool hasSuspiciousNamespace(String packageName) {
+    final pkg = _normalize(packageName);
+
     for (final pattern in suspiciousNamespaces) {
-      if (packageName.toLowerCase().contains(pattern)) {
-        return true;
-      }
+      if (pkg.contains(pattern)) return true;
     }
+
+    return false;
+  }
+
+  static bool hasFakeSystemPattern(String packageName) {
+    final pkg = _normalize(packageName);
+
+    for (final pattern in fakeSystemPatterns) {
+      if (pkg.contains(pattern)) return true;
+    }
+
     return false;
   }
 
   static bool isSafeHiddenPackage(String packageName) {
-    return safeHiddenPackages.contains(packageName);
+    return safeHiddenPackages.contains(_normalize(packageName));
   }
 }
