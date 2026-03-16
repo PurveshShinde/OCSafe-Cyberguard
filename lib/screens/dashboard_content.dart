@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:ocsafe_cyberguard/core/theme/app_theme.dart';
 import 'package:ocsafe_cyberguard/providers/security_provider.dart';
@@ -24,16 +25,33 @@ class DashboardContent extends StatelessWidget {
       builder: (context, provider, _) {
         return SingleChildScrollView(
           padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSummaryCard(context, provider),
-              const SizedBox(height: 24),
-              _buildQuickActions(context, provider),
-              const SizedBox(height: 24),
-              _buildActivitySection(context, provider),
-            ],
-          ),
+        child: Column(
+  crossAxisAlignment: CrossAxisAlignment.start,
+  children: [
+    _buildSummaryCard(context, provider),
+    const SizedBox(height: 24),
+    _buildQuickActions(context, provider),
+    const SizedBox(height: 24),
+    _buildActivitySection(context, provider),
+
+    const SizedBox(height: 24),
+
+    const Text(
+      "AI Security Assistant",
+      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+    ),
+
+    const SizedBox(height: 12),
+
+    SizedBox(
+      height: 400,
+      child: WebView(
+        initialUrl: "https://id-preview--b39997e2-1066-44f9-bef9-0071f566b1cd.lovable.app",
+        javascriptMode: JavascriptMode.unrestricted,
+      ),
+    ),
+  ],
+),
         );
       },
     );
