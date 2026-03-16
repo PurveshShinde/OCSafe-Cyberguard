@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import 'package:ocsafe_cyberguard/core/theme/app_theme.dart';
 import 'package:ocsafe_cyberguard/providers/security_provider.dart';
@@ -36,8 +37,11 @@ class ProfileScreen extends StatelessWidget {
               _buildInfoField(
                 context,
                 label: 'Name',
-                value: provider.userName,
-                onChanged: (v) => provider.updateUserName(v),
+                value: FirebaseAuth.instance.currentUser?.displayName ?? provider.userName,
+                onChanged: (v) {
+                  FirebaseAuth.instance.currentUser?.updateDisplayName(v);
+                  provider.updateUserName(v);
+                },
               ),
               const SizedBox(height: 12),
 
@@ -45,8 +49,11 @@ class ProfileScreen extends StatelessWidget {
               _buildInfoField(
                 context,
                 label: 'Email',
-                value: provider.userEmail,
-                onChanged: (v) => provider.updateUserEmail(v),
+                value: FirebaseAuth.instance.currentUser?.email ?? provider.userEmail,
+                onChanged: (v) {
+                  // Email update requires re-authentication, so we just update the provider for now
+                  provider.updateUserEmail(v);
+                },
               ),
               const SizedBox(height: 24),
 

@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:ocsafe_cyberguard/core/theme/app_theme.dart';
 import 'package:ocsafe_cyberguard/providers/security_provider.dart';
 import 'package:ocsafe_cyberguard/screens/auth/login_screen.dart';
 
-void main() {
+void main() async {
+  
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
   runApp(const OcSafeApp());
 }
 
 @pragma('vm:entry-point')
-void mainBackground() {
+void mainBackground() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
   
   const MethodChannel backgroundChannel = MethodChannel('com.ocsafe.cyberguard/background');
   
