@@ -9,7 +9,7 @@ import 'package:ocsafe_cyberguard/widgets/primary_button.dart';
 import 'package:ocsafe_cyberguard/screens/scan_screen.dart';
 import 'package:ocsafe_cyberguard/screens/permissions_screen.dart';
 import 'package:ocsafe_cyberguard/screens/optimization_screen.dart';
-import 'package:ocsafe_cyberguard/screens/chatbot_screen.dart';
+import 'package:ocsafe_cyberguard/screens/ChatbotScreen.dart';
 import 'package:ocsafe_cyberguard/models/activity_log.dart';
 import 'package:intl/intl.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -28,92 +28,60 @@ class _DashboardContentState extends State<DashboardContent> {
   @override
   Widget build(BuildContext context) {
     return Consumer<SecurityProvider>(
-  builder: (context, provider, _) {
-    return Stack(
-      children: [
-        SingleChildScrollView(
+      builder: (context, provider, _) {
+        return SingleChildScrollView(
           padding: const EdgeInsets.all(16),
-        child: Column(
-  crossAxisAlignment: CrossAxisAlignment.start,
-  children: [
-    _buildSummaryCard(context, provider),
-    const SizedBox(height: 24),
-    _buildQuickActions(context, provider),
-    const SizedBox(height: 24),
-    _buildActivitySection(context, provider),
-
-    const SizedBox(height: 24),
-    const Text(
-  "AI Security Assistant",
-  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-),
-
-const SizedBox(height: 12),
-
-GestureDetector(
-  onTap: () {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ChatbotScreen(),
-      ),
-    );
-  },
-  child: Container(
-    padding: const EdgeInsets.all(20),
-    decoration: BoxDecoration(
-      color: Colors.purple.withOpacity(0.1),
-      borderRadius: BorderRadius.circular(16),
-    ),
-    child: Row(
-      children: const [
-        Icon(Icons.smart_toy, size: 40, color: Colors.purple),
-        SizedBox(width: 16),
-        Text(
-          "Open AI Assistant",
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-      ],
-    ),
-  ),
-),
-    
-
-    const Text(
-      "AI Security Assistant",
-      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-    ),
-
-    const SizedBox(height: 12),
-
-    SimpleCard(
-      padding: const EdgeInsets.all(24),
-      child: Container(
-        height: 400,
-        width: double.infinity,
-        alignment: Alignment.center,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.auto_awesome, size: 48, color: AppColors.primary),
-            const SizedBox(height: 16),
-            Text(
-              "AI Assistant coming soon 🚀",
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSummaryCard(context, provider),
+              const SizedBox(height: 24),
+              _buildQuickActions(context, provider),
+              const SizedBox(height: 24),
+              _buildActivitySection(context, provider),
+              const SizedBox(height: 24),
+              const Text(
+                'AI Security Assistant',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ChatbotScreen(),
+                    ),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(16),
                   ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  ],
-),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.smart_toy, size: 40, color: Colors.purple),
+                      SizedBox(width: 16),
+                      Text(
+                        'Open AI Assistant',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
   }
+
 
   /// Security summary card containing the score and scan button.
   Widget _buildSummaryCard(BuildContext context, SecurityProvider provider) {
@@ -201,40 +169,70 @@ GestureDetector(
                 ),
           ),
           const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: ElevatedButton.icon(
-              icon: const Icon(Icons.security, size: 20, color: Colors.white),
-              label: Text(
-                provider.isScanning ? 'Scanning...' : 'Run Smart Scan',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
+          Row(
+            children: [
+              // ── Quick Scan ───────────────────────────────────────────────
+              Expanded(
+                child: _ScanButton(
+                  id: 'quick_scan_button',
+                  icon: Icons.flash_on_rounded,
+                  label: 'Quick Scan',
+                  subtitle: 'Apps only • ~2s',
+                  color: AppColors.primary,
+                  isScanning:
+                      provider.isScanning &&
+                      provider.currentScanType == ScanType.quick,
+                  onPressed: provider.isScanning
+                      ? null
+                      : () => _startScan(context, provider, ScanType.quick),
                 ),
               ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+              const SizedBox(width: 12),
+              // ── Deep Scan ────────────────────────────────────────────────
+              Expanded(
+                child: _ScanButton(
+                  id: 'deep_scan_button',
+                  icon: Icons.security_rounded,
+                  label: 'Deep Scan',
+                  subtitle: 'Apps + storage • ~10s',
+                  color: Colors.deepOrange,
+                  isScanning:
+                      provider.isScanning &&
+                      provider.currentScanType == ScanType.deep,
+                  onPressed: provider.isScanning
+                      ? null
+                      : () => _startScan(context, provider, ScanType.deep),
                 ),
-                elevation: 0,
               ),
-              onPressed: () async {
-                if (provider.isScanning) return;
-                await _startScanWithPermission(context, provider);
-              },
-            ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  /// Handles storage permission check before launching the scan.
-  /// All permission logic lives here — scanForSuspiciousFiles() only checks, never requests.
-  Future<void> _startScanWithPermission(
+  /// Dispatcher: Quick Scan skips storage permission; Deep Scan runs the full permission flow.
+  Future<void> _startScan(
+    BuildContext context,
+    SecurityProvider provider,
+    ScanType type,
+  ) async {
+    if (type == ScanType.quick) {
+      // Quick scan: apps only — no storage permission needed
+      provider.runScan(ScanType.quick);
+      if (!context.mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ScanScreen()),
+      );
+    } else {
+      // Deep scan: needs storage permission for file scanning
+      await _startDeepScanWithPermission(context, provider);
+    }
+  }
+
+  /// Handles storage permission check before launching the Deep Scan.
+  Future<void> _startDeepScanWithPermission(
     BuildContext context,
     SecurityProvider provider,
   ) async {
@@ -338,9 +336,8 @@ GestureDetector(
 
     if (!context.mounted) return;
 
-    // Set scan mode based on permission status
-    provider.setFullScan(granted);
-    provider.runScan();
+    // Set scan type to deep and launch
+    provider.runScan(ScanType.deep);
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ScanScreen()),
@@ -534,5 +531,78 @@ GestureDetector(
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     return DateFormat.yMMMd().format(time);
+  }
+}
+
+/// Compact scan-type button for the dashboard summary card.
+class _ScanButton extends StatelessWidget {
+  const _ScanButton({
+    required this.id,
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.color,
+    required this.isScanning,
+    required this.onPressed,
+  });
+
+  final String id;
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final Color color;
+  final bool isScanning;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton(
+      key: ValueKey(id),
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: onPressed == null
+            ? color.withValues(alpha: 0.4)
+            : color,
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+        elevation: 0,
+      ),
+      child: isScanning
+          ? const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                valueColor: AlwaysStoppedAnimation(Colors.white),
+              ),
+            )
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 22, color: Colors.white),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+    );
   }
 }

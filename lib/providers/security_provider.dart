@@ -16,6 +16,9 @@ import 'package:ocsafe_cyberguard/services/notification_service.dart';
 import 'package:ocsafe_cyberguard/services/safe_browsing_service.dart';
 import 'package:device_apps/device_apps.dart';
 
+/// Determines whether to run a fast app-only scan or a thorough full-device scan.
+enum ScanType { quick, deep }
+
 /// Central state manager orchestrating the multi-module security scan.
 class SecurityProvider extends ChangeNotifier {
   final AppScanner _appScanner = AppScanner();
@@ -31,7 +34,7 @@ class SecurityProvider extends ChangeNotifier {
   int _securityScore = 100;
   bool _isScanning = false;
   String _scanStage = '';
-  bool _isFullScan = false;
+  ScanType _scanType = ScanType.quick;
 
   ScanResult? _lastScanResult;
   List<Threat> _threats = [];
@@ -53,7 +56,9 @@ class SecurityProvider extends ChangeNotifier {
   int get securityScore => _securityScore;
   bool get isScanning => _isScanning;
   String get scanStage => _scanStage;
-  bool get isFullScan => _isFullScan;
+  ScanType get currentScanType => _scanType;
+  /// Convenience getter — true when the current/last scan was a Deep Scan.
+  bool get isFullScan => _scanType == ScanType.deep;
   ScanResult? get lastScanResult => _lastScanResult;
   List<Threat> get threats => _threats;
   List<ActivityLog> get activityLogs => _activityLogs;
@@ -343,104 +348,37 @@ class SecurityProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Sets whether the next scan should be a full device scan or limited scan.
-  void setFullScan(bool value) {
-    _isFullScan = value;
+  /// Sets which scan type to run next.
+  void setScanType(ScanType type) {
+    _scanType = type;
     notifyListeners();
   }
 
-  /// Runs a smart security scan with staged timing for UX.
-  /// If [_isFullScan] is true, scans both installed apps and device storage.
-  /// If false, scans installed apps only (Limited Scan).
-  Future<void> runScan() async {
-    if (_isScanning) return; // prevent multiple scans
+  /// Kept for backwards-compat (dashboard used setFullScan).
+  void setFullScan(bool value) {
+    _scanType = value ? ScanType.deep : ScanType.quick;
+    notifyListeners();
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // SCAN ENTRY POINT
+  // ─────────────────────────────────────────────────────────────────
+
+  /// Runs either Quick or Deep scan based on [type].
+  Future<void> runScan([ScanType? type]) async {
+    if (_isScanning) return;
+    if (type != null) _scanType = type;
 
     _isScanning = true;
     _threats.clear();
+    notifyListeners();
 
     try {
-      // 1. Pre-filter fetch: resolves system + trusted apps INSIDE the isolate.
-      //    Only non-system, non-trusted apps get the expensive getApp() IPC call.
-      _scanStage = 'Scanning installed apps...';
-      notifyListeners();
-      await Future.delayed(const Duration(milliseconds: 150));
-
-      // 2. Fetch + permission analysis — filtered list only
-      _scanStage = 'Analyzing app permissions...';
-      notifyListeners();
-
-      final RootIsolateToken token = RootIsolateToken.instance!;
-      final List<AppInfo> apps = await compute<Map<String, dynamic>, List<AppInfo>>(
-        fetchAllAppsBackground,
-        {
-          'token': token,
-          // Pass trusted packages so the isolate skips them during the fetch,
-          // avoiding redundant getApp() IPC calls for known-safe apps.
-          'trusted_packages': List<String>.from(_trustedApps),
-        },
-      );
-
-      // 3. Threat analysis — apps are already pre-filtered (no system / trusted)
-      _scanStage = 'Detecting malware & suspicious packages...';
-      notifyListeners();
-      await Future.delayed(const Duration(milliseconds: 150));
-
-      List<Threat> detectedThreats = await compute(
-        runThreatAnalysisBackground,
-        apps,
-      );
-
-      // 4. File scan — depth-limited to 3 for speed
-      List<String> filePaths = [];
-      if (_isFullScan) {
-        _scanStage = 'Scanning device storage for malicious files...';
-        notifyListeners();
-        await Future.delayed(const Duration(milliseconds: 150));
-
-        filePaths = await _apkScanner.scanForSuspiciousFiles();
-        final fileThreats = await compute(
-          evaluateSuspiciousFilesBackground,
-          filePaths,
-        );
-        detectedThreats.addAll(fileThreats);
+      if (_scanType == ScanType.quick) {
+        await _runQuickScan();
       } else {
-        _scanStage = 'Limited scan — skipping storage...';
-        notifyListeners();
-        await Future.delayed(const Duration(milliseconds: 100));
+        await _runDeepScan();
       }
-
-      // 5. Deduplicate & generate report
-      _scanStage = 'Calculating threats & generating report...';
-      notifyListeners();
-      await Future.delayed(const Duration(milliseconds: 150));
-
-      final seen = <String>{};
-      final uniqueThreats = detectedThreats
-          .where((t) => seen.add(t.packageName))
-          .toList();
-
-      _threats = uniqueThreats;
-      _updateScore();
-
-      // Create scan result
-      _lastScanResult = ScanResult(
-        scanDate: DateTime.now(),
-        totalAppsScanned: apps.length,
-        threatCount: _threats.length,
-        securityScore: _securityScore,
-        threats: _threats,
-        scanMode: _isFullScan ? 'full' : 'limited',
-      );
-
-      // Persist to database
-      await _databaseService.insertScanResult(_lastScanResult!);
-
-      // Log completion
-      final modeLabel = _isFullScan ? 'Full Scan' : 'Limited Scan';
-      await _logActivity(
-        '$modeLabel completed: ${apps.length} apps scanned, ${filePaths.length} files checked, ${_threats.length} threats found',
-        ActivityType.scan,
-      );
     } catch (e) {
       await _logActivity('Scan failed: $e', ActivityType.scan);
     } finally {
@@ -450,6 +388,118 @@ class SecurityProvider extends ChangeNotifier {
       await loadActivityLogs();
       notifyListeners();
     }
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // QUICK SCAN — Apps only, depth-limited file skip
+  // Target: 1–3 seconds
+  // ─────────────────────────────────────────────────────────────────
+  Future<void> _runQuickScan() async {
+    _scanStage = 'Quick Scan: Fetching installed apps...';
+    notifyListeners();
+    await Future.delayed(const Duration(milliseconds: 150));
+
+    final RootIsolateToken token = RootIsolateToken.instance!;
+    final List<AppInfo> apps = await compute<Map<String, dynamic>, List<AppInfo>>(
+      fetchAllAppsBackground,
+      {
+        'token': token,
+        'trusted_packages': List<String>.from(_trustedApps),
+      },
+    );
+
+    _scanStage = 'Quick Scan: Analyzing threats...';
+    notifyListeners();
+    await Future.delayed(const Duration(milliseconds: 150));
+
+    final List<Threat> detectedThreats = await compute(
+      runThreatAnalysisBackground,
+      apps,
+    );
+
+    _scanStage = 'Quick Scan: Building report...';
+    notifyListeners();
+
+    final seen = <String>{};
+    _threats = detectedThreats.where((t) => seen.add(t.packageName)).toList();
+    _updateScore();
+
+    _lastScanResult = ScanResult(
+      scanDate: DateTime.now(),
+      totalAppsScanned: apps.length,
+      threatCount: _threats.length,
+      securityScore: _securityScore,
+      threats: _threats,
+      scanMode: 'quick',
+    );
+
+    await _databaseService.insertScanResult(_lastScanResult!);
+    await _logActivity(
+      'Quick Scan completed: ${apps.length} apps scanned, ${_threats.length} threats found.',
+      ActivityType.scan,
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // DEEP SCAN — Apps + full file system at depth 6
+  // Target: 8–12 seconds
+  // ─────────────────────────────────────────────────────────────────
+  Future<void> _runDeepScan() async {
+    _scanStage = 'Deep Scan: Fetching installed apps...';
+    notifyListeners();
+    await Future.delayed(const Duration(milliseconds: 150));
+
+    final RootIsolateToken token = RootIsolateToken.instance!;
+    final List<AppInfo> apps = await compute<Map<String, dynamic>, List<AppInfo>>(
+      fetchAllAppsBackground,
+      {
+        'token': token,
+        'trusted_packages': List<String>.from(_trustedApps),
+      },
+    );
+
+    _scanStage = 'Deep Scan: Analyzing app threats...';
+    notifyListeners();
+    await Future.delayed(const Duration(milliseconds: 150));
+
+    List<Threat> detectedThreats = await compute(
+      runThreatAnalysisBackground,
+      apps,
+    );
+
+    // Full storage scan at depth 6
+    _scanStage = 'Deep Scan: Scanning device storage (depth 6)...';
+    notifyListeners();
+    await Future.delayed(const Duration(milliseconds: 150));
+
+    final filePaths = await _apkScanner.scanForSuspiciousFiles(
+      depth: ApkScanner.deepScanDepth,
+    );
+    final fileThreats = await compute(evaluateSuspiciousFilesBackground, filePaths);
+    detectedThreats.addAll(fileThreats);
+
+    _scanStage = 'Deep Scan: Building report...';
+    notifyListeners();
+    await Future.delayed(const Duration(milliseconds: 150));
+
+    final seen = <String>{};
+    _threats = detectedThreats.where((t) => seen.add(t.packageName)).toList();
+    _updateScore();
+
+    _lastScanResult = ScanResult(
+      scanDate: DateTime.now(),
+      totalAppsScanned: apps.length,
+      threatCount: _threats.length,
+      securityScore: _securityScore,
+      threats: _threats,
+      scanMode: 'deep',
+    );
+
+    await _databaseService.insertScanResult(_lastScanResult!);
+    await _logActivity(
+      'Deep Scan completed: ${apps.length} apps + ${filePaths.length} files scanned, ${_threats.length} threats found.',
+      ActivityType.scan,
+    );
   }
 
   /// Toggles real-time protection on/off.

@@ -118,12 +118,12 @@ class ApkScanner {
     '/storage/emulated/0/Telegram',
   ];
 
-  // Depth-limited to 3: real sideloaded APKs always sit in Download/,
-  // WhatsApp/Media, Telegram/ etc. — never 6 dirs deep.
-  // Reducing 6 → 3 cuts full-scan time by ~60% on large storage.
-  static const int _maxDepth = 3;
+  /// Quick Scan uses depth=3 (fast, covers Download/WhatsApp/Telegram).
+  /// Deep  Scan uses depth=6 (thorough, covers nested archives/dirs).
+  static const int quickScanDepth = 3;
+  static const int deepScanDepth  = 6;
 
-  Future<List<String>> scanForSuspiciousFiles() async {
+  Future<List<String>> scanForSuspiciousFiles({int depth = quickScanDepth}) async {
     final bool hasFullAccess = await hasStoragePermission();
 
     final List<String> dirsToScan = hasFullAccess
@@ -134,7 +134,7 @@ class ApkScanner {
         await compute(scanDirectoriesBackground, {
           'dirsToScan': dirsToScan,
           'extensions': _suspiciousExtensions,
-          'maxDepth': _maxDepth,
+          'maxDepth': depth,
         });
 
     return backgroundFoundFiles.toSet().toList();
