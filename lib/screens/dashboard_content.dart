@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:ocsafe_cyberguard/core/theme/app_theme.dart';
 import 'package:ocsafe_cyberguard/providers/security_provider.dart';
@@ -43,11 +42,26 @@ class DashboardContent extends StatelessWidget {
 
     const SizedBox(height: 12),
 
-    SizedBox(
-      height: 400,
-      child: WebView(
-        initialUrl: "https://id-preview--b39997e2-1066-44f9-bef9-0071f566b1cd.lovable.app",
-        javascriptMode: JavascriptMode.unrestricted,
+    SimpleCard(
+      padding: const EdgeInsets.all(24),
+      child: Container(
+        height: 400,
+        width: double.infinity,
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.auto_awesome, size: 48, color: AppColors.primary),
+            const SizedBox(height: 16),
+            Text(
+              "AI Assistant coming soon 🚀",
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary,
+                  ),
+            ),
+          ],
+        ),
       ),
     ),
   ],

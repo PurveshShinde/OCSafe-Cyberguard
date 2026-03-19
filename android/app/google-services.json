@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "288177605423",
+    "project_id": "ocsafe-cyberguard",
+    "storage_bucket": "ocsafe-cyberguard.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:288177605423:android:637d36e711b4d8f49defda",
+        "android_client_info": {
+          "package_name": "com.ocsafe.ocsafe_cyberguard"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "288177605423-1hlstc7dfv9aro56j6gtpugk6gia37b0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ocsafe.ocsafe_cyberguard",
+            "certificate_hash": "19ca0b95961440ce69d2d7235211d99e4e2f992e"
+          }
+        },
+        {
+          "client_id": "288177605423-dvntum3llf3r7ob0a7o11mcn63f55ptj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCLSuFxxVjQR_pXpOGaGnNHYvGc9dGxZtQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "288177605423-dvntum3llf3r7ob0a7o11mcn63f55ptj.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

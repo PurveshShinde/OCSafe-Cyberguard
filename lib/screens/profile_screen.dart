@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:ocsafe_cyberguard/core/theme/app_theme.dart';
 import 'package:ocsafe_cyberguard/providers/security_provider.dart';
 import 'package:ocsafe_cyberguard/widgets/simple_card.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// User profile screen with device info and security score.
 class ProfileScreen extends StatelessWidget {
@@ -32,21 +34,56 @@ class ProfileScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
 
-              // Name field
-              _buildInfoField(
-                context,
-                label: 'Name',
-                value: provider.userName,
-                onChanged: (v) => provider.updateUserName(v),
-              ),
-              const SizedBox(height: 12),
+              // Name & Email Stream Builder
+              StreamBuilder<DocumentSnapshot>(
+                stream: FirebaseAuth.instance.currentUser != null
+                    ? FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(FirebaseAuth.instance.currentUser!.uid)
+                        .snapshots()
+                    : const Stream.empty(),
+                builder: (context, snapshot) {
+                  String displayName = provider.userName;
+                  String displayEmail = provider.userEmail;
 
-              // Email field
-              _buildInfoField(
-                context,
-                label: 'Email',
-                value: provider.userEmail,
-                onChanged: (v) => provider.updateUserEmail(v),
+                  if (snapshot.hasData && snapshot.data!.exists) {
+                    final data = snapshot.data!.data() as Map<String, dynamic>;
+                    displayName = data['name'] ?? FirebaseAuth.instance.currentUser?.displayName ?? 'User';
+                    displayEmail = data['email'] ?? FirebaseAuth.instance.currentUser?.email ?? '';
+                  }
+
+                  return Column(
+                    children: [
+                      // Name field
+                      _buildInfoField(
+                        context,
+                        label: 'Name',
+                        value: displayName,
+                        onChanged: (v) {
+                          provider.updateUserName(v);
+                          if (FirebaseAuth.instance.currentUser != null) {
+                            FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(FirebaseAuth.instance.currentUser!.uid)
+                                .set({'name': v}, SetOptions(merge: true));
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Email field
+                      _buildInfoField(
+                        context,
+                        label: 'Email',
+                        value: displayEmail,
+                        onChanged: (v) {
+                          provider.updateUserEmail(v);
+                          // Option to update email in Firestore and maybe Auth
+                        },
+                      ),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 24),
 
@@ -133,6 +170,7 @@ class ProfileScreen extends StatelessWidget {
         Text(label, style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 4),
         TextFormField(
+          key: ValueKey(value),
           initialValue: value,
           style: Theme.of(context).textTheme.bodyLarge,
           onFieldSubmitted: onChanged,

@@ -2,11 +2,46 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:ocsafe_cyberguard/core/theme/app_theme.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ocsafe_cyberguard/providers/security_provider.dart';
 import 'package:ocsafe_cyberguard/screens/auth/login_screen.dart';
+import 'package:ocsafe_cyberguard/screens/home_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  try {
+    print("DEBUG: Attempting to initialize Firebase...");
+    await Firebase.initializeApp();
+    print("DEBUG: Firebase initialized successfully.");
+  } catch (e, stacktrace) {
+    print("DEBUG: Firebase initialization failed: \$e");
+    print(stacktrace);
+    
+    // TEMPORARY DEBUG UI / ERROR REPORTING
+    // Prevents the black screen crash if config is missing
+    runApp(MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Text(
+              'Firebase Initialization Error:\\n\\n\$e\\n\\nPlease ensure google-services.json is added in android/app.',
+              style: const TextStyle(color: Colors.red, fontSize: 16),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ),
+    ));
+    return;
+  }
+
+  // RESTORE ORIGINAL SCREEN: Run normal app if successful
+  print("DEBUG: Starting OcSafeApp...");
   runApp(const OcSafeApp());
 }
 
@@ -54,8 +89,32 @@ class OcSafeApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         themeMode: ThemeMode.light,
         theme: AppTheme.theme,
-        home: const LoginScreen(),
+        home: const AuthWrapper(),
       ),
+    );
+  }
+}
+
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            ),
+          );
+        }
+        if (snapshot.hasData) {
+          return const HomeScreen();
+        }
+        return const LoginScreen();
+      },
     );
   }
 }
