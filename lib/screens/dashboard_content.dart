@@ -15,14 +15,22 @@ import 'package:device_info_plus/device_info_plus.dart';
 
 
 /// Main dashboard content shown on the Home tab.
-class DashboardContent extends StatelessWidget {
+class DashboardContent extends StatefulWidget {
   const DashboardContent({super.key});
+
+  @override
+  State<DashboardContent> createState() => _DashboardContentState();
+}
+
+class _DashboardContentState extends State<DashboardContent> {
 
   @override
   Widget build(BuildContext context) {
     return Consumer<SecurityProvider>(
-      builder: (context, provider, _) {
-        return SingleChildScrollView(
+  builder: (context, provider, _) {
+    return Stack(
+      children: [
+        SingleChildScrollView(
           padding: const EdgeInsets.all(16),
         child: Column(
   crossAxisAlignment: CrossAxisAlignment.start,
@@ -34,6 +42,41 @@ class DashboardContent extends StatelessWidget {
     _buildActivitySection(context, provider),
 
     const SizedBox(height: 24),
+    const Text(
+  "AI Security Assistant",
+  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+),
+
+const SizedBox(height: 12),
+
+GestureDetector(
+  onTap: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatbotScreen(),
+      ),
+    );
+  },
+  child: Container(
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      color: Colors.purple.withOpacity(0.1),
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: Row(
+      children: const [
+        Icon(Icons.smart_toy, size: 40, color: Colors.purple),
+        SizedBox(width: 16),
+        Text(
+          "Open AI Assistant",
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+      ],
+    ),
+  ),
+),
+    
 
     const Text(
       "AI Security Assistant",
