@@ -57,14 +57,23 @@ void mainBackground() {
     if (call.method == 'package_event') {
       final String? packageName = call.arguments['package_name'];
       final String? action = call.arguments['action'];
+      // Sideload flag set by PackageReceiver.kt based on installer source check
+      final bool isSideloaded = call.arguments['is_sideloaded'] as bool? ?? true;
+      final bool isUpdate = call.arguments['is_update'] as bool? ?? false;
       
       if (packageName != null) {
         final securityProvider = SecurityProvider();
         await securityProvider.initializeHeadless();
         
-        if (action == 'android.intent.action.PACKAGE_ADDED') {
-          print('DEBUG: Starting headless scan for $packageName');
-          await securityProvider.scanSingleAppHeadless(packageName);
+        if (action == 'android.intent.action.PACKAGE_ADDED' ||
+            action == 'android.intent.action.PACKAGE_REPLACED') {
+          print('DEBUG: Starting headless scan for $packageName '
+                '(sideloaded=$isSideloaded, update=$isUpdate)');
+          await securityProvider.scanSingleAppHeadless(
+            packageName,
+            isSideloaded: isSideloaded,
+            isUpdate: isUpdate,
+          );
         } else if (action == 'android.intent.action.PACKAGE_REMOVED') {
           print('DEBUG: Starting headless cleanup for $packageName');
           await securityProvider.removeThreatHeadless(packageName);

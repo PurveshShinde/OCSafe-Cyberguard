@@ -10,8 +10,6 @@ import 'package:ocsafe_cyberguard/services/app_scanner.dart'; // also exports fe
 import 'package:ocsafe_cyberguard/services/apk_scanner.dart';
 import 'package:ocsafe_cyberguard/services/device_health_service.dart';
 import 'package:ocsafe_cyberguard/services/database_service.dart';
-import 'package:ocsafe_cyberguard/services/threat_intel.dart';
-import 'package:ocsafe_cyberguard/services/signature_scanner.dart';
 import 'package:ocsafe_cyberguard/services/threat_analyzer.dart';
 import 'package:ocsafe_cyberguard/services/preferences_service.dart';
 import 'package:ocsafe_cyberguard/services/notification_service.dart';
@@ -71,21 +69,37 @@ class SecurityProvider extends ChangeNotifier {
 
   /// Initialize all data on app start.
   Future<void> initialize() async {
-    await _loadSettings();
-    await loadDeviceInfo();
-    await loadHistory();
-    await loadActivityLogs();
+    try {
+      // MUST be called first — PreferencesService uses a `late` SharedPreferences
+      // instance that throws LateInitializationError if accessed before init().
+      await _preferencesService.init();
 
-    // Initialize Local Notifications
-    await _notificationService.init();
-    await _notificationService.requestPermission();
+      await _loadSettings();
+      await loadDeviceInfo();
+      await loadHistory();
+      await loadActivityLogs();
 
-    // Setup Real-time Malware Installation Listener
-    _setupRealtimeListener();
+      // Initialize Local Notifications
+      await _notificationService.init();
+      await _notificationService.requestPermission();
+
+      // Setup Real-time Malware Installation Listener
+      _setupRealtimeListener();
+    } catch (e) {
+      // Log but don't crash — partial init is better than no init
+      debugPrint('[SecurityProvider] initialize() error: $e');
+      // Still attempt notification setup even if other steps failed
+      try {
+        await _notificationService.init();
+        await _notificationService.requestPermission();
+      } catch (_) {}
+    }
   }
 
   /// Initialize only what's necessary for a headless background scan
   Future<void> initializeHeadless() async {
+    // MUST call init() first — same LateInitializationError risk in headless context
+    await _preferencesService.init();
     await _loadSettings();
     await _notificationService.init();
   }
@@ -166,7 +180,22 @@ class SecurityProvider extends ChangeNotifier {
     });
   }
 
-  Future<void> scanSingleAppHeadless(String packageName) async {
+  /// Scans a single app in a headless (background) context.
+  ///
+  /// [isSideloaded] — true when the installer is NOT a trusted store (Play Store, OEM stores).
+  ///   Sideloaded apps get a full deep analysis and, if dangerous, trigger a notification.
+  ///
+  /// [isUpdate] — true when the package existed before (update vs. fresh install).
+  ///   Updates from unknown sources still get scanned, but already-trusted apps are skipped.
+  ///
+  /// Play Store / trusted store installs: **log only, no notification** (expedited path).
+  /// Sideloaded + HIGH/MEDIUM threat: **show warning notification**.
+  /// Sideloaded + LOW/safe: **log only, no notification**.
+  Future<void> scanSingleAppHeadless(
+    String packageName, {
+    bool isSideloaded = true,
+    bool isUpdate = false,
+  }) async {
     if (!_realtimeProtection) return;
 
     // Skip if trusted
@@ -175,27 +204,43 @@ class SecurityProvider extends ChangeNotifier {
       return;
     }
 
-    print('DEBUG: scanSingleAppHeadless started for $packageName');
+    // ─── Play Store / Trusted Source Install ───────────────────────────────
+    // Play Store manages its own security. Skip deep scan entirely and just log.
+    if (!isSideloaded) {
+      print('DEBUG: $packageName installed from trusted source. Log only.');
+      final appInfo = await _appScanner.fetchAppWithPermissions(packageName);
+      if (appInfo != null) {
+        await _logActivity(
+          'Play Store install: ${appInfo.appName} — trusted source, skipping deep scan.',
+          ActivityType.protection,
+        );
+      }
+      return;
+    }
 
-    // Attempt to fetch app info with a few retries as the OS might take a moment to manifest the new app fully
+    // ─── Sideloaded APK — Full Deep Scan ──────────────────────────────────
+    print('DEBUG: scanSingleAppHeadless — SIDELOADED scan for $packageName '
+          '(isUpdate=$isUpdate)');
+
+    // Retry up to 3 times: the OS may take a moment to manifest the new install
     AppInfo? appInfo;
     for (int i = 0; i < 3; i++) {
       appInfo = await _appScanner.fetchAppWithPermissions(packageName);
       if (appInfo != null) break;
-      print(
-        'DEBUG: AppInfo not found for $packageName, retrying in 2s... (Attempt ${i + 1})',
-      );
+      print('DEBUG: AppInfo not found for $packageName, retrying… (${i + 1}/3)');
       await Future.delayed(const Duration(seconds: 2));
     }
 
     if (appInfo != null) {
-      print('DEBUG: Analyzing $packageName in background...');
+      print('DEBUG: Analyzing $packageName in background…');
       final threat = _threatAnalyzer.analyzeApp(appInfo);
 
-      if (threat != null && threat.riskLevel != 'LOW') {
-        print('DEBUG: Threat detected in background! ${threat.appName}');
+      if (threat != null && (threat.riskLevel == 'HIGH' || threat.riskLevel == 'MEDIUM')) {
+        // ── Dangerous sideloaded APK → notify the user ──────────────────
+        print('DEBUG: Threat detected! ${threat.appName} (${threat.riskLevel})');
         await _logActivity(
-          'Headless Detection: ${threat.appName} flagged as ${threat.riskLevel} risk!',
+          'Sideload Detection: ${threat.appName} flagged as ${threat.riskLevel} risk! '
+          'Reason: ${threat.reasons.first}',
           ActivityType.threat,
         );
         await _notificationService.showWarningNotification(
@@ -205,9 +250,10 @@ class SecurityProvider extends ChangeNotifier {
           packageName: threat.packageName,
         );
       } else {
-        print('DEBUG: App is safe.');
+        // ── Safe or LOW-risk sideloaded APK → silent log only ───────────
+        print('DEBUG: Sideloaded app is safe — no notification.');
         await _logActivity(
-          'Headless Scanner: ${appInfo.appName} installed (Safe)',
+          'Sideload Scanner: ${appInfo.appName} installed — no threats found.',
           ActivityType.protection,
         );
       }
@@ -313,39 +359,43 @@ class SecurityProvider extends ChangeNotifier {
     _threats.clear();
 
     try {
-      // 1. Scan installed apps
+      // 1. Pre-filter fetch: resolves system + trusted apps INSIDE the isolate.
+      //    Only non-system, non-trusted apps get the expensive getApp() IPC call.
       _scanStage = 'Scanning installed apps...';
       notifyListeners();
-      await Future.delayed(const Duration(milliseconds: 800));
+      await Future.delayed(const Duration(milliseconds: 150));
 
-      // 2. Fetch apps WITH real permissions for accurate analysis (in background isolate)
+      // 2. Fetch + permission analysis — filtered list only
       _scanStage = 'Analyzing app permissions...';
       notifyListeners();
-      await Future.delayed(const Duration(milliseconds: 800));
 
       final RootIsolateToken token = RootIsolateToken.instance!;
-      final List<AppInfo> apps = await compute(fetchAllAppsBackground, token);
+      final List<AppInfo> apps = await compute<Map<String, dynamic>, List<AppInfo>>(
+        fetchAllAppsBackground,
+        {
+          'token': token,
+          // Pass trusted packages so the isolate skips them during the fetch,
+          // avoiding redundant getApp() IPC calls for known-safe apps.
+          'trusted_packages': List<String>.from(_trustedApps),
+        },
+      );
 
-      // Filter out trusted applications from the scan queue
-      apps.removeWhere((app) => _trustedApps.contains(app.packageName));
-
-      // 3. Suspicious packages analysis + threat detection (in background isolate)
+      // 3. Threat analysis — apps are already pre-filtered (no system / trusted)
       _scanStage = 'Detecting malware & suspicious packages...';
       notifyListeners();
-      await Future.delayed(const Duration(milliseconds: 800));
+      await Future.delayed(const Duration(milliseconds: 150));
 
       List<Threat> detectedThreats = await compute(
         runThreatAnalysisBackground,
         apps,
       );
 
-      // 4. Scan for suspicious files across entire device storage (APKs, ZIPs, DEX, etc.)
-      //    Only runs in Full Scan mode (when storage permission is granted).
+      // 4. File scan — depth-limited to 3 for speed
       List<String> filePaths = [];
       if (_isFullScan) {
-        _scanStage = 'Scanning whole device storage for malicious files...';
+        _scanStage = 'Scanning device storage for malicious files...';
         notifyListeners();
-        await Future.delayed(const Duration(milliseconds: 800));
+        await Future.delayed(const Duration(milliseconds: 150));
 
         filePaths = await _apkScanner.scanForSuspiciousFiles();
         final fileThreats = await compute(
@@ -354,17 +404,15 @@ class SecurityProvider extends ChangeNotifier {
         );
         detectedThreats.addAll(fileThreats);
       } else {
-        _scanStage = 'Limited scan — skipping storage (no permission)...';
+        _scanStage = 'Limited scan — skipping storage...';
         notifyListeners();
-        await Future.delayed(const Duration(milliseconds: 600));
+        await Future.delayed(const Duration(milliseconds: 100));
       }
 
-      // 5. Deduplicate & calculate threats & generate report
-      // On Android, /sdcard and /storage/emulated/0 are symlinked — same files
-      // may be found twice. Deduplicate by packageName (file path for file threats).
+      // 5. Deduplicate & generate report
       _scanStage = 'Calculating threats & generating report...';
       notifyListeners();
-      await Future.delayed(const Duration(milliseconds: 800));
+      await Future.delayed(const Duration(milliseconds: 150));
 
       final seen = <String>{};
       final uniqueThreats = detectedThreats
@@ -500,12 +548,14 @@ class SecurityProvider extends ChangeNotifier {
   // --- Private helpers ---
 
   Future<void> _loadSettings() async {
-    _realtimeProtection = await _preferencesService.getRealtimeProtection();
-    _safeBrowsing = await _preferencesService.getSafeBrowsing();
-    _autoScan = await _preferencesService.getAutoScan();
-    _userName = await _preferencesService.getUserName();
-    _userEmail = await _preferencesService.getUserEmail();
-    _trustedApps = await _preferencesService.getTrustedApps();
+    // Note: PreferencesService getters are synchronous after init() is called.
+    // The await is harmless here but the real risk was calling these before init().
+    _realtimeProtection = _preferencesService.getRealtimeProtection();
+    _safeBrowsing = _preferencesService.getSafeBrowsing();
+    _autoScan = _preferencesService.getAutoScan();
+    _userName = _preferencesService.getUserName();
+    _userEmail = _preferencesService.getUserEmail();
+    _trustedApps = _preferencesService.getTrustedApps();
     notifyListeners();
   }
 

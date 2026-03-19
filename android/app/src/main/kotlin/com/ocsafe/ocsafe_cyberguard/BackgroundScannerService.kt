@@ -20,9 +20,13 @@ class BackgroundScannerService : Service() {
         super.onCreate()
         createNotificationChannel()
         
-        // Dynamically register receiver to ensure it stays alive with the service
+        // Dynamically register receiver to ensure it stays alive with the service.
+        // Register ALL package lifecycle events so we never miss sideloads or uninstalls.
         packageReceiver = PackageReceiver()
-        val filter = IntentFilter(Intent.ACTION_PACKAGE_ADDED).apply {
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
             addDataScheme("package")
         }
         registerReceiver(packageReceiver, filter)

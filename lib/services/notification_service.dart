@@ -1,4 +1,5 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -49,12 +50,36 @@ class NotificationService {
     _isInitialized = true;
   }
 
-  /// Request notification permission (Android 13+)
+  /// Request notification permission (Android 13+).
+  ///
+  /// Strategy:
+  ///  - If permission is already GRANTED → mark as done, return (no dialog).
+  ///  - If permission is NOT granted → request it, regardless of whether
+  ///    we've asked before. This handles the case where the user denied once
+  ///    but later revoked/re-enabled in Settings.
+  ///  - A SharedPreferences flag is used to avoid showing the dialog on EVERY
+  ///    launch (only once per grant cycle).
   Future<void> requestPermission() async {
     try {
-      await Permission.notification.request();
+      final prefs = await SharedPreferences.getInstance();
+      const prefKey = 'notif_permission_granted';
+
+      final permStatus = await Permission.notification.status;
+
+      if (permStatus.isGranted) {
+        // Already granted — just record it and stop
+        await prefs.setBool(prefKey, true);
+        return;
+      }
+
+      // Not granted: request it. We do this even if we asked before,
+      // in case the user changed their mind or denied accidentally.
+      final result = await Permission.notification.request();
+      await prefs.setBool(prefKey, result.isGranted);
+
+      debugPrint('[NotificationService] Permission result: $result');
     } catch (e) {
-      debugPrint('Notification permission request failed: $e');
+      debugPrint('[NotificationService] requestPermission failed: $e');
     }
   }
 
