@@ -9,6 +9,7 @@ import 'package:ocsafe_cyberguard/widgets/primary_button.dart';
 import 'package:ocsafe_cyberguard/screens/scan_screen.dart';
 import 'package:ocsafe_cyberguard/screens/permissions_screen.dart';
 import 'package:ocsafe_cyberguard/screens/optimization_screen.dart';
+import 'package:ocsafe_cyberguard/screens/chatbot_screen.dart';
 import 'package:ocsafe_cyberguard/models/activity_log.dart';
 import 'package:intl/intl.dart';
 import 'package:device_info_plus/device_info_plus.dart';
