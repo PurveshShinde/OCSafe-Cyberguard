@@ -14,7 +14,6 @@ import 'package:ocsafe_cyberguard/models/activity_log.dart';
 import 'package:intl/intl.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 
-
 /// Main dashboard content shown on the Home tab.
 class DashboardContent extends StatefulWidget {
   const DashboardContent({super.key});
@@ -24,7 +23,6 @@ class DashboardContent extends StatefulWidget {
 }
 
 class _DashboardContentState extends State<DashboardContent> {
-
   @override
   Widget build(BuildContext context) {
     return Consumer<SecurityProvider>(
@@ -82,7 +80,6 @@ class _DashboardContentState extends State<DashboardContent> {
     );
   }
 
-
   /// Security summary card containing the score and scan button.
   Widget _buildSummaryCard(BuildContext context, SecurityProvider provider) {
     final score = provider.securityScore;
@@ -124,7 +121,8 @@ class _DashboardContentState extends State<DashboardContent> {
                   children: [
                     Text(
                       '$score%',
-                      style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                      style: Theme.of(context).textTheme.headlineLarge
+                          ?.copyWith(
                             color: color,
                             fontWeight: FontWeight.w900,
                             fontSize: 48,
@@ -134,11 +132,11 @@ class _DashboardContentState extends State<DashboardContent> {
                     Text(
                       'SECURITY SCORE',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.0,
-                            color: Colors.grey,
-                            fontSize: 10,
-                          ),
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.0,
+                        color: Colors.grey,
+                        fontSize: 10,
+                      ),
                     ),
                   ],
                 ),
@@ -150,23 +148,23 @@ class _DashboardContentState extends State<DashboardContent> {
             score >= 80
                 ? 'Your device is well protected'
                 : score >= 50
-                    ? 'Some security issues found'
-                    : 'Security attention needed',
+                ? 'Some security issues found'
+                : 'Security attention needed',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
-                ),
+              color: color,
+              fontWeight: FontWeight.bold,
+              fontSize: 20,
+            ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
           Text(
             provider.lastScanResult != null
-              ? 'Last scan: ${DateFormat.yMMMd().add_jm().format(provider.lastScanResult!.scanDate)}'
-              : 'Never scanned',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey.shade600,
-                ),
+                ? 'Last scan: ${DateFormat.yMMMd().add_jm().format(provider.lastScanResult!.scanDate)}'
+                : 'Never scanned',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
           ),
           const SizedBox(height: 24),
           Row(
@@ -251,43 +249,53 @@ class _DashboardContentState extends State<DashboardContent> {
 
         // Show explanation dialog with user-specified wording
         final bool? userChoice = await showDialog<bool>(
-              context: context,
-              barrierDismissible: false,
-              builder: (ctx) => AlertDialog(
-                backgroundColor: AppColors.surface,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                icon: const Icon(Icons.folder_open, color: AppColors.primary, size: 40),
-                title: const Text(
-                  'Storage Permission Required',
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppColors.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            icon: const Icon(
+              Icons.folder_open,
+              color: AppColors.primary,
+              size: 40,
+            ),
+            title: const Text(
+              'Storage Permission Required',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            content: const Text(
+              'CyberGuard needs access to device storage to scan APK files, '
+              'archives, and suspicious files across your device.\n\n'
+              'Without this permission, the scan will only check installed applications.',
+              style: TextStyle(color: AppColors.textSecondary, height: 1.5),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text(
+                  'Continue with Limited Scan',
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text(
+                  'Allow Full Scan',
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
-                content: const Text(
-                  'CyberGuard needs access to device storage to scan APK files, '
-                  'archives, and suspicious files across your device.\n\n'
-                  'Without this permission, the scan will only check installed applications.',
-                  style: TextStyle(color: AppColors.textSecondary, height: 1.5),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx, false),
-                    child: const Text('Continue with Limited Scan',
-                        style: TextStyle(color: AppColors.textSecondary)),
-                  ),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    onPressed: () => Navigator.pop(ctx, true),
-                    child: const Text(
-                      'Allow Full Scan',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
               ),
-            );
+            ],
+          ),
+        );
 
         if (!context.mounted) return;
 
@@ -300,7 +308,9 @@ class _DashboardContentState extends State<DashboardContent> {
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Grant "All Files Access" in Settings, then return to the app...'),
+                  content: Text(
+                    'Grant "All Files Access" in Settings, then return to the app...',
+                  ),
                   duration: Duration(seconds: 30),
                   backgroundColor: AppColors.warning,
                 ),
@@ -321,11 +331,15 @@ class _DashboardContentState extends State<DashboardContent> {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(granted
-                    ? '✅ Storage access granted — starting full scan.'
-                    : '⚠️ Storage permission not granted. Running limited scan.'),
+                content: Text(
+                  granted
+                      ? '✅ Storage access granted — starting full scan.'
+                      : '⚠️ Storage permission not granted. Running limited scan.',
+                ),
                 duration: const Duration(seconds: 3),
-                backgroundColor: granted ? AppColors.primary : AppColors.warning,
+                backgroundColor: granted
+                    ? AppColors.primary
+                    : AppColors.warning,
               ),
             );
           }
@@ -343,7 +357,6 @@ class _DashboardContentState extends State<DashboardContent> {
       MaterialPageRoute(builder: (_) => const ScanScreen()),
     );
   }
-
 
   /// Quick action cards grid.
   Widget _buildQuickActions(BuildContext context, SecurityProvider provider) {
@@ -368,7 +381,7 @@ class _DashboardContentState extends State<DashboardContent> {
               trailing: Switch(
                 value: provider.realtimeProtection,
                 onChanged: provider.toggleRealtimeProtection,
-                activeColor: Colors.white,
+                activeThumbColor: Colors.white,
                 activeTrackColor: AppColors.primary,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
@@ -382,7 +395,7 @@ class _DashboardContentState extends State<DashboardContent> {
               trailing: Switch(
                 value: provider.safeBrowsing,
                 onChanged: (val) => provider.toggleSafeBrowsing(val),
-                activeColor: Colors.white,
+                activeThumbColor: Colors.white,
                 activeTrackColor: AppColors.primary,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
@@ -391,8 +404,10 @@ class _DashboardContentState extends State<DashboardContent> {
               context,
               icon: Icons.lock,
               label: 'App\nPermissions',
-              onTap: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const PermissionsScreen())),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PermissionsScreen()),
+              ),
               trailing: Switch(
                 value: false,
                 onChanged: null, // Visually disabled off switch
@@ -403,8 +418,10 @@ class _DashboardContentState extends State<DashboardContent> {
               context,
               icon: Icons.monitor_heart,
               label: 'Device\nHealth',
-              onTap: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const OptimizationScreen())),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const OptimizationScreen()),
+              ),
               trailing: Switch(
                 value: false,
                 onChanged: null, // Visually disabled off switch
@@ -436,11 +453,7 @@ class _DashboardContentState extends State<DashboardContent> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                icon,
-                color: AppColors.primary,
-                size: 28,
-              ),
+              Icon(icon, color: AppColors.primary, size: 28),
               if (trailing != null)
                 SizedBox(
                   height: 30,
@@ -452,11 +465,11 @@ class _DashboardContentState extends State<DashboardContent> {
           Text(
             label,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                  height: 1.2,
-                  color: AppColors.textPrimary, // Always dark like screenshot
-                ),
+              fontWeight: FontWeight.w700,
+              fontSize: 16,
+              height: 1.2,
+              color: AppColors.textPrimary, // Always dark like screenshot
+            ),
           ),
         ],
       ),
@@ -464,7 +477,10 @@ class _DashboardContentState extends State<DashboardContent> {
   }
 
   /// Recent activity feed.
-  Widget _buildActivitySection(BuildContext context, SecurityProvider provider) {
+  Widget _buildActivitySection(
+    BuildContext context,
+    SecurityProvider provider,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -512,9 +528,9 @@ class _DashboardContentState extends State<DashboardContent> {
       ),
       title: Text(
         log.message,
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppColors.textPrimary,
-            ),
+        style: Theme.of(
+          context,
+        ).textTheme.bodyMedium?.copyWith(color: AppColors.textPrimary),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
@@ -564,9 +580,7 @@ class _ScanButton extends StatelessWidget {
             ? color.withValues(alpha: 0.4)
             : color,
         foregroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
         elevation: 0,
       ),

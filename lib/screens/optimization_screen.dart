@@ -88,6 +88,8 @@ class _OptimizationScreenState extends State<OptimizationScreen> {
                 _infoTile(context, 'Model', device.deviceModel, Icons.smartphone),
                 _infoTile(context, 'Android Version', device.androidVersion, Icons.android),
                 _infoTile(context, 'Storage Used', '${device.storageUsedPercentage}%', Icons.storage),
+                _infoTile(context, 'Junk Cache', '${device.cacheSizeMB} MB', Icons.cleaning_services),
+                _infoTile(context, 'Health Score', '${device.healthScore}/100', Icons.health_and_safety),
               ] else
                 const SimpleCard(
                   child: Center(
@@ -97,9 +99,96 @@ class _OptimizationScreenState extends State<OptimizationScreen> {
                     ),
                   ),
                 ),
+              
+              const SizedBox(height: 32),
+
+              // Action Buttons
+              if (device != null) ...[
+                if (provider.isOptimizing)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24.0),
+                      child: CircularProgressIndicator(),
+                    ),
+                  )
+                else ...[
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      onPressed: () => _handleOptimize(context, provider),
+                      child: const Text(
+                        '1-Tap Optimize',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.textSecondary,
+                      ),
+                      onPressed: () => _handleClearCache(context, provider),
+                      child: const Text('Clear Cache Only'),
+                    ),
+                  ),
+                ],
+              ],
             ],
           );
         },
+      ),
+    );
+  }
+
+  Future<void> _handleOptimize(BuildContext context, SecurityProvider provider) async {
+    final result = await provider.optimizeDevice();
+    if (!context.mounted || result.isEmpty) return;
+
+    final double freedMB = result['freedMB'] as double;
+    final int appsScanned = result['appsScanned'] as int;
+    final int threatsFound = result['threatsFound'] as int;
+
+    String msg;
+    if (freedMB == 0 && threatsFound == 0) {
+      msg = "Device is already fully optimized. No junk or threats found.";
+    } else {
+      msg = "Freed ${freedMB}MB • Scanned $appsScanned apps • $threatsFound risks found";
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _handleClearCache(BuildContext context, SecurityProvider provider) async {
+    final result = await provider.clearCacheOnly();
+    if (!context.mounted || result.isEmpty) return;
+
+    final double freedMB = result['freedMB'] as double;
+    String msg;
+    if (freedMB == 0) {
+      msg = "No junk files found.";
+    } else {
+      msg = "Freed ${freedMB}MB of cache!";
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }

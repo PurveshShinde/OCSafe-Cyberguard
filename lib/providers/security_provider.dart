@@ -14,6 +14,7 @@ import 'package:ocsafe_cyberguard/services/threat_analyzer.dart';
 import 'package:ocsafe_cyberguard/services/preferences_service.dart';
 import 'package:ocsafe_cyberguard/services/notification_service.dart';
 import 'package:ocsafe_cyberguard/services/safe_browsing_service.dart';
+import 'package:ocsafe_cyberguard/services/cache_cleaner_service.dart';
 import 'package:device_apps/device_apps.dart';
 
 /// Determines whether to run a fast app-only scan or a thorough full-device scan.
@@ -33,6 +34,7 @@ class SecurityProvider extends ChangeNotifier {
   // --- State ---
   int _securityScore = 100;
   bool _isScanning = false;
+  bool _isOptimizing = false;
   String _scanStage = '';
   ScanType _scanType = ScanType.quick;
 
@@ -55,6 +57,7 @@ class SecurityProvider extends ChangeNotifier {
   // --- Getters ---
   int get securityScore => _securityScore;
   bool get isScanning => _isScanning;
+  bool get isOptimizing => _isOptimizing;
   String get scanStage => _scanStage;
   ScanType get currentScanType => _scanType;
   /// Convenience getter — true when the current/last scan was a Deep Scan.
@@ -593,6 +596,60 @@ class SecurityProvider extends ChangeNotifier {
     _userEmail = email;
     await _preferencesService.setUserEmail(email);
     notifyListeners();
+  }
+
+  // --- Optimization ---
+  Future<Map<String, dynamic>> optimizeDevice() async {
+    if (_isOptimizing) return {};
+    _isOptimizing = true;
+    notifyListeners();
+
+    try {
+      // 1. Clear Cache
+      final cacheResult = await CacheCleanerService().cleanCache();
+      final double freedMB = cacheResult['freedMB'] as double;
+      final int filesDeleted = cacheResult['filesDeleted'] as int;
+
+      // 2. Run Quick Scan
+      await runScan(ScanType.quick);
+
+      // 3. Update Device Health
+      await loadDeviceInfo();
+
+      // 4. Log Activity
+      await _logActivity(
+        '1-Tap Optimization: Freed ${freedMB}MB and completed security scan.',
+        ActivityType.protection,
+      );
+
+      final int appsScanned = _lastScanResult?.totalAppsScanned ?? 0;
+      final int threatsFound = _lastScanResult?.threatCount ?? 0;
+
+      return {
+        "freedMB": freedMB,
+        "filesDeleted": filesDeleted,
+        "appsScanned": appsScanned,
+        "threatsFound": threatsFound,
+      };
+    } finally {
+      _isOptimizing = false;
+      notifyListeners();
+    }
+  }
+
+  Future<Map<String, dynamic>> clearCacheOnly() async {
+    if (_isOptimizing) return {};
+    _isOptimizing = true;
+    notifyListeners();
+
+    try {
+      final cacheResult = await CacheCleanerService().cleanCache();
+      await loadDeviceInfo();
+      return cacheResult;
+    } finally {
+      _isOptimizing = false;
+      notifyListeners();
+    }
   }
 
   // --- Private helpers ---

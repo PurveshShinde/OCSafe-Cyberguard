@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:battery_plus/battery_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:ocsafe_cyberguard/services/cache_cleaner_service.dart';
 
 class DeviceHealthService {
   final DeviceInfoPlugin _deviceInfoPlugin = DeviceInfoPlugin();
@@ -13,6 +14,9 @@ class DeviceHealthService {
     int batteryLevel = 0;
     String batteryState = 'Unknown';
     int storageUsedPercentage = 0;
+    
+    // Start cache calculation asynchronously to not block other metrics
+    final cacheFuture = CacheCleanerService().getCacheSize();
 
     try {
       if (Platform.isAndroid) {
@@ -51,12 +55,31 @@ class DeviceHealthService {
       storageUsedPercentage = 0;
     }
 
+    double cacheSizeMB = 0.0;
+    try {
+      final cacheResult = await cacheFuture;
+      cacheSizeMB = cacheResult['sizeMB'] as double;
+    } catch (_) {}
+
+    // Calculate a composite health score based on metrics
+    int healthScore = 100;
+    if (batteryLevel < 20 && batteryLevel > 0) healthScore -= 10;
+    if (storageUsedPercentage > 90) healthScore -= 15;
+    else if (storageUsedPercentage > 80) healthScore -= 5;
+    
+    // Impact of junk cache on health
+    if (cacheSizeMB > 500) healthScore -= 15;
+    else if (cacheSizeMB > 100) healthScore -= 5;
+    else if (cacheSizeMB == 0) healthScore = (healthScore + 5).clamp(0, 100);
+
     return DeviceHealthData(
       androidVersion: androidVersion,
       deviceModel: deviceModel,
       batteryLevel: batteryLevel,
       batteryState: batteryState,
       storageUsedPercentage: storageUsedPercentage,
+      cacheSizeMB: cacheSizeMB,
+      healthScore: healthScore,
     );
   }
 }
@@ -67,6 +90,8 @@ class DeviceHealthData {
   final int batteryLevel;
   final String batteryState;
   final int storageUsedPercentage;
+  final double cacheSizeMB;
+  final int healthScore;
 
   DeviceHealthData({
     required this.androidVersion,
@@ -74,5 +99,7 @@ class DeviceHealthData {
     required this.batteryLevel,
     required this.batteryState,
     required this.storageUsedPercentage,
+    required this.cacheSizeMB,
+    required this.healthScore,
   });
 }
