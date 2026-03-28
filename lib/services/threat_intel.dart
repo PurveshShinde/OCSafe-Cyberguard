@@ -11,6 +11,7 @@ class ThreatIntel {
     'com.android.systemui',
     'com.google.android.gms',
     'com.android.vending',
+    'com.ocsafe.ocsafe_cyberguard', // Trust ourselves
   };
 
   /// Trusted namespaces (system/OEM)

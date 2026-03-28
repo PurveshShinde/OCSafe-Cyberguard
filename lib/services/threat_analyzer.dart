@@ -1,8 +1,8 @@
 import 'package:ocsafe_cyberguard/models/app_info.dart';
+import 'package:ocsafe_cyberguard/models/app_features.dart';
 import 'package:ocsafe_cyberguard/models/threat.dart';
-import 'package:ocsafe_cyberguard/services/permission_scanner.dart';
+import 'package:ocsafe_cyberguard/services/risk_scoring_engine.dart';
 import 'package:ocsafe_cyberguard/services/signature_scanner.dart';
-import 'package:ocsafe_cyberguard/services/stealth_app_detector.dart';
 import 'package:ocsafe_cyberguard/services/apk_static_analyzer.dart';
 
 @pragma('vm:entry-point')
@@ -25,30 +25,10 @@ List<Threat> evaluateSuspiciousFilesBackground(List<String> filePaths) {
 }
 
 class ThreatAnalyzer {
-  final PermissionScanner _permissionScanner = PermissionScanner();
+  final RiskScoringEngine _scoringEngine = RiskScoringEngine();
 
   /// Cache for already scanned packages
   final Map<String, Threat?> _analysisCache = {};
-
-  static const List<String> suspiciousKeywords = [
-    'hack',
-    'spy',
-    'keylog',
-    'stealth',
-    'inject',
-    'exploit',
-    'trojan',
-    'rat',
-    'backdoor',
-    'phish',
-    'spoof',
-    'crack',
-    'bypass',
-    'fake',
-    'clone',
-    'adware',
-    'clicker',
-  ];
 
   static const List<String> trustedNamespaces = [
     'com.android.',
@@ -79,32 +59,11 @@ class ThreatAnalyzer {
     'com.mub.zqavw',
   ];
 
-  static const Map<String, String> popularAppsWhitelist = {
-    'whatsapp': 'com.whatsapp',
-    'facebook': 'com.facebook.katana',
-    'instagram': 'com.instagram.android',
-    'youtube': 'com.google.android.youtube',
-    'telegram': 'org.telegram.messenger',
-    'spotify': 'com.spotify.music',
-    'netflix': 'com.netflix.mediaclient',
-  };
-
   bool _isTrustedNamespace(String packageName) {
     for (final ns in trustedNamespaces) {
       if (packageName.startsWith(ns)) return true;
     }
     return false;
-  }
-
-  bool _isPlayStoreApp(AppInfo app) {
-    if (app.installSource == null) return false;
-    return app.installSource!.contains('android.vending');
-  }
-
-  bool _isSideloaded(AppInfo app) {
-    if (app.isSystemApp) return false;
-    if (_isPlayStoreApp(app)) return false;
-    return true;
   }
 
   Threat? analyzeApp(AppInfo app) {
@@ -116,10 +75,7 @@ class ThreatAnalyzer {
         ? app.packageName
         : app.appName;
 
-    final packageLower = app.packageName.toLowerCase();
-    final nameLower = displayName.toLowerCase();
-
-    /// Known malware detection
+    /// Known malware detection (fast path — always check)
     if (!app.isSystemApp &&
         (SignatureScanner.isMaliciousPackage(app.packageName) ||
             knownMaliciousPackages.contains(app.packageName))) {
@@ -132,6 +88,7 @@ class ThreatAnalyzer {
         permissionsRequested: [],
         recommendedAction:
             'DANGEROUS: Known malware detected. Uninstall immediately.',
+        confidence: 100,
       );
 
       _analysisCache[app.packageName] = threat;
@@ -144,87 +101,27 @@ class ThreatAnalyzer {
       return null;
     }
 
-    final sideloaded = _isSideloaded(app);
+    // ── Extract features & delegate to centralized scoring engine ──
+    final features = AppFeatures.fromAppInfo(app);
+    final riskScore = _scoringEngine.evaluate(features);
 
-    List<String> reasons = [];
-    int totalScore = 0;
-    String recommendation = 'Review app usage if unfamiliar.';
-
-    List<String> perms = [];
-
-    /// Permission analysis
-    final permissionThreat = _permissionScanner.analyzeAppPermissions(app);
-
-    if (permissionThreat != null) {
-      reasons.addAll(permissionThreat.reasons);
-      totalScore += permissionThreat.threatScore;
-      recommendation = permissionThreat.recommendedAction;
-      perms = permissionThreat.permissionsRequested;
-    }
-
-    /// Keyword detection
-    if (sideloaded) {
-      final suspicious = suspiciousKeywords.any(
-        (k) => packageLower.contains(k) || nameLower.contains(k),
-      );
-
-      if (suspicious) {
-        reasons.add('Suspicious keyword detected in app name or package');
-        totalScore += 20;
-      }
-    }
-
-    /// Fake app detection
-    for (final entry in popularAppsWhitelist.entries) {
-      if (nameLower.contains(entry.key) && app.packageName != entry.value) {
-        reasons.add('Possible impersonation of popular application');
-        totalScore += 35;
-        recommendation = 'Fake application detected. Uninstall recommended.';
-        break;
-      }
-    }
-
-    /// Stealth malware detection
-    if (StealthAppDetector.isStealthApp(app)) {
-      reasons.add('Hidden or stealth application detected');
-      totalScore += 50;
-    }
-
-    /// Unknown install source
-    if (sideloaded && totalScore > 0) {
-      reasons.add('Application installed from unknown source');
-      totalScore += 10;
-    }
-
-    if (totalScore <= 0) {
+    if (riskScore.score < 15) {
       _analysisCache[app.packageName] = null;
       return null;
-    }
-
-    if (totalScore > 100) totalScore = 100;
-
-    String riskLevel;
-
-    if (totalScore >= 70) {
-      riskLevel = 'HIGH';
-    } else if (totalScore >= 35) {
-      riskLevel = 'MEDIUM';
-    } else {
-      riskLevel = 'LOW';
     }
 
     final threat = Threat(
       appName: displayName,
       packageName: app.packageName,
-      riskLevel: riskLevel,
-      threatScore: totalScore,
-      reasons: reasons,
-      permissionsRequested: perms,
-      recommendedAction: recommendation,
+      riskLevel: riskScore.riskLevel,
+      threatScore: riskScore.score,
+      reasons: riskScore.reasons,
+      permissionsRequested: riskScore.flaggedPermissions,
+      recommendedAction: riskScore.recommendedAction,
+      confidence: riskScore.confidence,
     );
 
     _analysisCache[app.packageName] = threat;
-
     return threat;
   }
 
@@ -248,6 +145,7 @@ class ThreatAnalyzer {
             permissionsRequested: [],
             recommendedAction: 'Only install APK files from trusted sources.',
             threatType: 'file',
+            confidence: 70,
           ),
         );
       } else if (lowerName.endsWith('.zip') || lowerName.endsWith('.rar')) {
@@ -265,6 +163,7 @@ class ThreatAnalyzer {
               recommendedAction:
                   'Archive contains suspicious content. Delete immediately.',
               threatType: 'file',
+              confidence: 85,
             ),
           );
         }

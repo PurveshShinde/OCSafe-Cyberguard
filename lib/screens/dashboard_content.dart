@@ -5,7 +5,6 @@ import 'package:ocsafe_cyberguard/core/theme/app_theme.dart';
 import 'package:ocsafe_cyberguard/providers/security_provider.dart';
 import 'package:ocsafe_cyberguard/services/apk_scanner.dart';
 import 'package:ocsafe_cyberguard/widgets/simple_card.dart';
-import 'package:ocsafe_cyberguard/widgets/primary_button.dart';
 import 'package:ocsafe_cyberguard/screens/scan_screen.dart';
 import 'package:ocsafe_cyberguard/screens/permissions_screen.dart';
 import 'package:ocsafe_cyberguard/screens/optimization_screen.dart';

@@ -1,6 +1,7 @@
 package com.ocsafe.ocsafe_cyberguard
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -12,11 +13,15 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.EventChannel
 import io.flutter.embedding.engine.FlutterEngineCache
+import java.io.File
+import java.io.FileInputStream
+import java.security.MessageDigest
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.ocsafe.cyberguard/uninstall"
     private val STORAGE_CHANNEL = "com.ocsafe.cyberguard/storage_permission"
     private val EVENT_CHANNEL = "com.ocsafe.cyberguard/package_receiver"
+    private val APK_HASH_CHANNEL = "com.ocsafe.cyberguard/apk_hash"
     
     companion object {
         var eventSink: EventChannel.EventSink? = null
@@ -114,6 +119,66 @@ class MainActivity: FlutterActivity() {
                     }
                 }
                 else -> result.notImplemented()
+            }
+        }
+
+        // APK hash channel — computes SHA-256 of installed APKs
+        // Uses publicSourceDir (primary) + splitSourceDirs (fallback) for split APK support
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, APK_HASH_CHANNEL).setMethodCallHandler { call, result ->
+            if (call.method == "getApkHash") {
+                val packageName = call.argument<String>("packageName")
+                if (packageName == null) {
+                    result.error("INVALID_ARG", "packageName is required", null)
+                    return@setMethodCallHandler
+                }
+
+                try {
+                    val appInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        packageManager.getApplicationInfo(
+                            packageName,
+                            PackageManager.ApplicationInfoFlags.of(0)
+                        )
+                    } else {
+                        @Suppress("DEPRECATION")
+                        packageManager.getApplicationInfo(packageName, 0)
+                    }
+
+                    // Priority: publicSourceDir → sourceDir → first splitSourceDir
+                    val apkPath = appInfo.publicSourceDir
+                        ?: appInfo.sourceDir
+                        ?: appInfo.splitSourceDirs?.firstOrNull()
+
+                    if (apkPath == null) {
+                        result.error("NO_APK", "Could not locate APK for $packageName", null)
+                        return@setMethodCallHandler
+                    }
+
+                    val file = File(apkPath)
+                    if (!file.exists()) {
+                        result.error("NOT_FOUND", "APK file not found at $apkPath", null)
+                        return@setMethodCallHandler
+                    }
+
+                    // Stream-based SHA-256 (memory efficient for large APKs)
+                    val digest = MessageDigest.getInstance("SHA-256")
+                    val buffer = ByteArray(8192)
+                    FileInputStream(file).use { fis ->
+                        var bytesRead: Int
+                        while (fis.read(buffer).also { bytesRead = it } != -1) {
+                            digest.update(buffer, 0, bytesRead)
+                        }
+                    }
+
+                    val hashHex = digest.digest().joinToString("") { "%02x".format(it) }
+                    result.success(hashHex)
+
+                } catch (e: PackageManager.NameNotFoundException) {
+                    result.error("NOT_FOUND", "Package $packageName not found", null)
+                } catch (e: Exception) {
+                    result.error("HASH_ERROR", "Failed to hash APK: ${e.message}", null)
+                }
+            } else {
+                result.notImplemented()
             }
         }
     }

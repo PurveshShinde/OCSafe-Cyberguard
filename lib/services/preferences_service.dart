@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Centralized preferences manager for CyberGuard.
 /// Uses caching + singleton for faster access.
@@ -12,6 +13,7 @@ class PreferencesService {
   PreferencesService._internal();
 
   late SharedPreferences _prefs;
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
   static const String _keyRealtimeProtection = 'realtime_protection';
   static const String _keySafeBrowsing = 'safe_browsing';
@@ -19,6 +21,8 @@ class PreferencesService {
   static const String _keyUserName = 'user_name';
   static const String _keyUserEmail = 'user_email';
   static const String _keyTrustedApps = 'trusted_apps';
+  static const String _keyVTEnabled = 'vt_enabled';
+  static const String _keyVTApiKey = 'vt_api_key'; // stored in secure storage
 
   List<String> _trustedAppsCache = [];
 
@@ -52,6 +56,26 @@ class PreferencesService {
 
   Future<void> setAutoScan(bool value) async {
     await _prefs.setBool(_keyAutoScan, value);
+  }
+
+  // ---------------- VirusTotal Settings ----------------
+
+  bool getVirusTotalEnabled() {
+    return _prefs.getBool(_keyVTEnabled) ?? false;
+  }
+
+  Future<void> setVirusTotalEnabled(bool value) async {
+    await _prefs.setBool(_keyVTEnabled, value);
+  }
+
+  /// Get VT API key from secure storage (async, encrypted).
+  Future<String> getVirusTotalApiKey() async {
+    return await _secureStorage.read(key: _keyVTApiKey) ?? '';
+  }
+
+  /// Store VT API key in secure storage (encrypted, not SharedPreferences).
+  Future<void> setVirusTotalApiKey(String key) async {
+    await _secureStorage.write(key: _keyVTApiKey, value: key);
   }
 
   // ---------------- User Profile ----------------
@@ -96,3 +120,4 @@ class PreferencesService {
     return _trustedAppsCache.contains(packageName);
   }
 }
+

@@ -5,6 +5,8 @@ import 'package:ocsafe_cyberguard/models/threat.dart';
 import 'package:ocsafe_cyberguard/models/scan_result.dart';
 import 'package:ocsafe_cyberguard/models/activity_log.dart';
 import 'package:ocsafe_cyberguard/models/app_info.dart';
+import 'package:ocsafe_cyberguard/models/app_features.dart';
+import 'package:ocsafe_cyberguard/models/vt_result.dart';
 
 import 'package:ocsafe_cyberguard/services/app_scanner.dart'; // also exports fetchAllAppsBackground
 import 'package:ocsafe_cyberguard/services/apk_scanner.dart';
@@ -15,6 +17,8 @@ import 'package:ocsafe_cyberguard/services/preferences_service.dart';
 import 'package:ocsafe_cyberguard/services/notification_service.dart';
 import 'package:ocsafe_cyberguard/services/safe_browsing_service.dart';
 import 'package:ocsafe_cyberguard/services/cache_cleaner_service.dart';
+import 'package:ocsafe_cyberguard/services/virus_total_service.dart';
+import 'package:ocsafe_cyberguard/services/apk_hash_service.dart';
 import 'package:device_apps/device_apps.dart';
 
 /// Determines whether to run a fast app-only scan or a thorough full-device scan.
@@ -30,6 +34,10 @@ class SecurityProvider extends ChangeNotifier {
   final PreferencesService _preferencesService = PreferencesService();
   final NotificationService _notificationService = NotificationService();
   final SafeBrowsingService _safeBrowsingService = SafeBrowsingService();
+  final ApkHashService _apkHashService = ApkHashService();
+
+  // VT service — initialized lazily once API key is loaded
+  VirusTotalService? _virusTotalService;
 
   // --- State ---
   int _securityScore = 100;
@@ -51,6 +59,7 @@ class SecurityProvider extends ChangeNotifier {
   bool _realtimeProtection = true;
   bool _safeBrowsing = true;
   bool _autoScan = false;
+  bool _vtEnabled = false;
   String _userName = 'User';
   String _userEmail = '';
 
@@ -60,6 +69,7 @@ class SecurityProvider extends ChangeNotifier {
   bool get isOptimizing => _isOptimizing;
   String get scanStage => _scanStage;
   ScanType get currentScanType => _scanType;
+
   /// Convenience getter — true when the current/last scan was a Deep Scan.
   bool get isFullScan => _scanType == ScanType.deep;
   ScanResult? get lastScanResult => _lastScanResult;
@@ -72,6 +82,7 @@ class SecurityProvider extends ChangeNotifier {
   bool get realtimeProtection => _realtimeProtection;
   bool get safeBrowsing => _safeBrowsing;
   bool get autoScan => _autoScan;
+  bool get vtEnabled => _vtEnabled;
   String get userName => _userName;
   String get userEmail => _userEmail;
 
@@ -83,6 +94,7 @@ class SecurityProvider extends ChangeNotifier {
       await _preferencesService.init();
 
       await _loadSettings();
+      await _initVirusTotalService();
       await loadDeviceInfo();
       await loadHistory();
       await loadActivityLogs();
@@ -110,6 +122,30 @@ class SecurityProvider extends ChangeNotifier {
     await _preferencesService.init();
     await _loadSettings();
     await _notificationService.init();
+  }
+
+  /// Initialize VT service if API key is available.
+  Future<void> _initVirusTotalService() async {
+    // ── TESTING: Hardcoded API key (active when non-empty) ──
+    const String hardcodedApiKey =
+        '0fe5b3344472539feafde6b178bcdea18fb1ff0bf9593c3c07dea4d2fc9e1545';
+
+    // Try secure storage first, fall back to hardcoded key
+    String apiKey = await _preferencesService.getVirusTotalApiKey();
+    if (apiKey.isEmpty && hardcodedApiKey.isNotEmpty) {
+      apiKey = hardcodedApiKey;
+    }
+
+    debugPrint('DEBUG [VT Init]: apiKey empty=${apiKey.isEmpty}, vtEnabled=$_vtEnabled');
+
+    if (apiKey.isNotEmpty) {
+      // Force-enable VT when a key is present (for testing)
+      _vtEnabled = true;
+      _virusTotalService = VirusTotalService(apiKey: apiKey);
+      debugPrint('DEBUG [VT Init]: VirusTotalService INITIALIZED. Ready for Deep Scan.');
+    } else {
+      debugPrint('DEBUG [VT Init]: No API key found. VT disabled.');
+    }
   }
 
   void _setupRealtimeListener() {
@@ -227,15 +263,19 @@ class SecurityProvider extends ChangeNotifier {
     }
 
     // ─── Sideloaded APK — Full Deep Scan ──────────────────────────────────
-    print('DEBUG: scanSingleAppHeadless — SIDELOADED scan for $packageName '
-          '(isUpdate=$isUpdate)');
+    print(
+      'DEBUG: scanSingleAppHeadless — SIDELOADED scan for $packageName '
+      '(isUpdate=$isUpdate)',
+    );
 
     // Retry up to 3 times: the OS may take a moment to manifest the new install
     AppInfo? appInfo;
     for (int i = 0; i < 3; i++) {
       appInfo = await _appScanner.fetchAppWithPermissions(packageName);
       if (appInfo != null) break;
-      print('DEBUG: AppInfo not found for $packageName, retrying… (${i + 1}/3)');
+      print(
+        'DEBUG: AppInfo not found for $packageName, retrying… (${i + 1}/3)',
+      );
       await Future.delayed(const Duration(seconds: 2));
     }
 
@@ -243,9 +283,12 @@ class SecurityProvider extends ChangeNotifier {
       print('DEBUG: Analyzing $packageName in background…');
       final threat = _threatAnalyzer.analyzeApp(appInfo);
 
-      if (threat != null && (threat.riskLevel == 'HIGH' || threat.riskLevel == 'MEDIUM')) {
+      if (threat != null &&
+          (threat.riskLevel == 'HIGH' || threat.riskLevel == 'MEDIUM')) {
         // ── Dangerous sideloaded APK → notify the user ──────────────────
-        print('DEBUG: Threat detected! ${threat.appName} (${threat.riskLevel})');
+        print(
+          'DEBUG: Threat detected! ${threat.appName} (${threat.riskLevel})',
+        );
         await _logActivity(
           'Sideload Detection: ${threat.appName} flagged as ${threat.riskLevel} risk! '
           'Reason: ${threat.reasons.first}',
@@ -372,6 +415,12 @@ class SecurityProvider extends ChangeNotifier {
     if (_isScanning) return;
     if (type != null) _scanType = type;
 
+    debugPrint('DEBUG [SCAN]: ══════════════════════════════════════');
+    debugPrint('DEBUG [SCAN]: SCAN STARTED — type=${_scanType.name.toUpperCase()}');
+    debugPrint('DEBUG [SCAN]: VT Service initialized=${_virusTotalService != null}');
+    debugPrint('DEBUG [SCAN]: vtEnabled=$_vtEnabled');
+    debugPrint('DEBUG [SCAN]: ══════════════════════════════════════');
+
     _isScanning = true;
     _threats.clear();
     notifyListeners();
@@ -383,6 +432,7 @@ class SecurityProvider extends ChangeNotifier {
         await _runDeepScan();
       }
     } catch (e) {
+      debugPrint('DEBUG [SCAN]: ERROR — $e');
       await _logActivity('Scan failed: $e', ActivityType.scan);
     } finally {
       _isScanning = false;
@@ -394,7 +444,7 @@ class SecurityProvider extends ChangeNotifier {
   }
 
   // ─────────────────────────────────────────────────────────────────
-  // QUICK SCAN — Apps only, depth-limited file skip
+  // QUICK SCAN — Apps only, LOCAL heuristics only (no VT)
   // Target: 1–3 seconds
   // ─────────────────────────────────────────────────────────────────
   Future<void> _runQuickScan() async {
@@ -403,13 +453,11 @@ class SecurityProvider extends ChangeNotifier {
     await Future.delayed(const Duration(milliseconds: 150));
 
     final RootIsolateToken token = RootIsolateToken.instance!;
-    final List<AppInfo> apps = await compute<Map<String, dynamic>, List<AppInfo>>(
-      fetchAllAppsBackground,
-      {
-        'token': token,
-        'trusted_packages': List<String>.from(_trustedApps),
-      },
-    );
+    final List<AppInfo> apps =
+        await compute<Map<String, dynamic>, List<AppInfo>>(
+          fetchAllAppsBackground,
+          {'token': token, 'trusted_packages': List<String>.from(_trustedApps)},
+        );
 
     _scanStage = 'Quick Scan: Analyzing threats...';
     notifyListeners();
@@ -444,8 +492,8 @@ class SecurityProvider extends ChangeNotifier {
   }
 
   // ─────────────────────────────────────────────────────────────────
-  // DEEP SCAN — Apps + full file system at depth 6
-  // Target: 8–12 seconds
+  // DEEP SCAN — instant local results + async background VT
+  // Local phase: < 3s | VT phase: background, non-blocking
   // ─────────────────────────────────────────────────────────────────
   Future<void> _runDeepScan() async {
     _scanStage = 'Deep Scan: Fetching installed apps...';
@@ -453,13 +501,11 @@ class SecurityProvider extends ChangeNotifier {
     await Future.delayed(const Duration(milliseconds: 150));
 
     final RootIsolateToken token = RootIsolateToken.instance!;
-    final List<AppInfo> apps = await compute<Map<String, dynamic>, List<AppInfo>>(
-      fetchAllAppsBackground,
-      {
-        'token': token,
-        'trusted_packages': List<String>.from(_trustedApps),
-      },
-    );
+    final List<AppInfo> apps =
+        await compute<Map<String, dynamic>, List<AppInfo>>(
+          fetchAllAppsBackground,
+          {'token': token, 'trusted_packages': List<String>.from(_trustedApps)},
+        );
 
     _scanStage = 'Deep Scan: Analyzing app threats...';
     notifyListeners();
@@ -470,21 +516,21 @@ class SecurityProvider extends ChangeNotifier {
       apps,
     );
 
-    // Full storage scan at depth 6
-    _scanStage = 'Deep Scan: Scanning device storage (depth 6)...';
+    // Storage scan in parallel with threat analysis
+    _scanStage = 'Deep Scan: Scanning device storage...';
     notifyListeners();
-    await Future.delayed(const Duration(milliseconds: 150));
 
     final filePaths = await _apkScanner.scanForSuspiciousFiles(
       depth: ApkScanner.deepScanDepth,
     );
-    final fileThreats = await compute(evaluateSuspiciousFilesBackground, filePaths);
+    final fileThreats = await compute(
+      evaluateSuspiciousFilesBackground,
+      filePaths,
+    );
     detectedThreats.addAll(fileThreats);
 
-    _scanStage = 'Deep Scan: Building report...';
-    notifyListeners();
-    await Future.delayed(const Duration(milliseconds: 150));
-
+    // ── PHASE 1: Show local results IMMEDIATELY (no blocking) ──────────
+    _scanStage = 'Deep Scan: Local analysis complete. Cloud check running...';
     final seen = <String>{};
     _threats = detectedThreats.where((t) => seen.add(t.packageName)).toList();
     _updateScore();
@@ -500,9 +546,200 @@ class SecurityProvider extends ChangeNotifier {
 
     await _databaseService.insertScanResult(_lastScanResult!);
     await _logActivity(
-      'Deep Scan completed: ${apps.length} apps + ${filePaths.length} files scanned, ${_threats.length} threats found.',
+      'Deep Scan (local): ${apps.length} apps + ${filePaths.length} files — ${_threats.length} threats found.',
       ActivityType.scan,
     );
+    notifyListeners(); // ← UI shows local results RIGHT NOW
+
+    // ── PHASE 2: Fire VT checks in background (non-blocking, async) ────
+    if (_vtEnabled && _virusTotalService != null) {
+      _launchBackgroundVTChecks(detectedThreats: List.from(_threats), apps: apps);
+    }
+  }
+
+  /// Fires VirusTotal checks completely asynchronously.
+  /// UI is NOT blocked — results stream in and update when VT completes.
+  void _launchBackgroundVTChecks({
+    required List<Threat> detectedThreats,
+    required List<AppInfo> apps,
+  }) {
+    Future(() async {
+      try {
+        debugPrint('DEBUG [VT Background]: Starting background VT checks...');
+
+        final vtService = _virusTotalService!;
+
+        final appMap = <String, AppInfo>{};
+        for (final app in apps) {
+          appMap[app.packageName] = app;
+        }
+
+        // Filter to sideloaded-only
+        final vtCandidates = detectedThreats.where((t) {
+          if (t.threatType != 'app') return false;
+          final appInfo = appMap[t.packageName];
+          if (appInfo == null) return false;
+          final features = AppFeatures.fromAppInfo(appInfo);
+          return features.isSideloaded && t.threatScore >= 20;
+        }).toList();
+
+        debugPrint('DEBUG [VT Background]: ${vtCandidates.length} sideloaded app(s) to cloud-check.');
+
+        if (vtCandidates.isEmpty) {
+          _scanStage = '✅ Deep Scan complete — all apps verified locally.';
+          notifyListeners();
+          return;
+        }
+
+        // ── UX Stage: show cloud-check in progress ──
+        _scanStage = '🔄 Cloud checking ${vtCandidates.length} sideloaded app(s)...';
+        notifyListeners();
+
+        // ── Concurrency limiter: max 4 parallel VT calls ──────────────────
+        // Prevents API rate limit errors and network spikes.
+        const int maxConcurrent = 4;
+        final results = <Threat>[];
+
+        for (int i = 0; i < vtCandidates.length; i += maxConcurrent) {
+          final batch = vtCandidates.skip(i).take(maxConcurrent).toList();
+          final batchResults = await Future.wait(
+            batch.map((t) => _checkSingleAppVT(t, vtService, appMap[t.packageName])),
+          );
+          results.addAll(batchResults);
+
+          // Update progress stage after each batch
+          final done = (i + batch.length).clamp(0, vtCandidates.length);
+          _scanStage = '🔄 Cloud check: $done/${vtCandidates.length} apps verified...';
+          notifyListeners();
+        }
+
+        // Merge VT results back into the live threats list
+        final updated = <String, Threat>{};
+        for (final r in results) {
+          if (r.vtChecked) updated[r.packageName] = r;
+        }
+
+        if (updated.isNotEmpty) {
+          _threats = _threats.map((t) => updated[t.packageName] ?? t).toList();
+          _updateScore();
+
+          if (_lastScanResult != null) {
+            _lastScanResult = ScanResult(
+              scanDate: _lastScanResult!.scanDate,
+              totalAppsScanned: _lastScanResult!.totalAppsScanned,
+              threatCount: _threats.length,
+              securityScore: _securityScore,
+              threats: _threats,
+              scanMode: 'deep',
+            );
+          }
+
+          await _logActivity(
+            'VirusTotal: ${updated.length} sideloaded app(s) cloud-verified in background.',
+            ActivityType.scan,
+          );
+          debugPrint('DEBUG [VT Background]: Done — ${updated.length} app(s) updated with VT results.');
+        }
+
+        // ── UX Stage: final state ──
+        _scanStage = '✔ Deep Scan complete — ${updated.length > 0 ? "${updated.length} app(s) cloud-verified" : "all apps locally verified"}';
+        notifyListeners();
+      } catch (e) {
+        debugPrint('DEBUG [VT Background]: Error — $e');
+        _scanStage = '✔ Deep Scan complete (cloud check failed gracefully)';
+        notifyListeners();
+      }
+    });
+  }
+
+
+  /// Performs a single VT check for one threat (parallel-safe).
+  /// Uses versionCode as part of the cache key to detect app updates.
+  Future<Threat> _checkSingleAppVT(
+    Threat threat,
+    VirusTotalService vtService,
+    AppInfo? appInfo,
+  ) async {
+    try {
+      // Version-aware cache lookup: same package + same version → cache hit
+      // If version changed → cache miss → re-hash and re-check VT
+      final versionCode = appInfo?.versionName;
+      final cached = await _databaseService.getVTCacheByPackage(
+        threat.packageName,
+        versionCode: versionCode,
+      );
+      if (cached != null) {
+        debugPrint('DEBUG [VT Pipeline]: Cache hit (v$versionCode) → ${threat.packageName}');
+        return _applyVTResult(threat, cached.malicious, cached.suspicious, cached.totalEngines);
+      }
+
+      debugPrint('DEBUG [VT Pipeline]: Cache miss (v$versionCode) → ${threat.packageName}. Computing SHA256...');
+      final hash = await _apkHashService.getApkHash(threat.packageName);
+      if (hash == null) {
+        debugPrint('DEBUG [VT Pipeline]: Hash failed → ${threat.packageName}. Skipping.');
+        return threat;
+      }
+      debugPrint('DEBUG [VT Pipeline]: Hash → $hash');
+      debugPrint('DEBUG [VT Pipeline]: Sending to VirusTotal → ${threat.packageName}');
+
+      final vtResult = await vtService.checkFileHash(
+        hash,
+        packageName: threat.packageName,
+        versionCode: versionCode,
+      );
+
+      if (vtResult != null) {
+        debugPrint('DEBUG [VT Pipeline]: Response → ${vtResult.malicious}/${vtResult.totalEngines} malicious');
+        await _databaseService.cacheVTResult(vtResult);
+        return _applyVTResult(threat, vtResult.malicious, vtResult.suspicious, vtResult.totalEngines);
+      } else {
+        debugPrint('DEBUG [VT Pipeline]: VT returned null (404/timeout) → ${threat.packageName}. Fallback to local score.');
+        return threat;
+      }
+    } catch (e) {
+      debugPrint('DEBUG [VT Pipeline]: Error → ${threat.packageName}: $e');
+      return threat;
+    }
+  }
+
+  /// Merges VT result into a threat using ratio-based scoring.
+  Threat _applyVTResult(Threat threat, int malicious, int suspicious, int totalEngines) {
+    final vtResult = VTResult(
+      malicious: malicious,
+      suspicious: suspicious,
+      undetected: totalEngines - malicious - suspicious,
+      harmless: 0,
+      checkedAt: DateTime.now(),
+      hash: '',
+      packageName: threat.packageName,
+    );
+
+    final boost = VirusTotalService.calculateVTScoreBoost(vtResult);
+    final newScore = (threat.threatScore + boost).clamp(0, 100);
+
+    debugPrint('  -> Local: ${threat.threatScore} | VT Boost: +$boost | Final: $newScore');
+
+    return threat.copyWith(
+      threatScore: newScore,
+      riskLevel: _classifyRisk(newScore),
+      vtMalicious: malicious,
+      vtSuspicious: suspicious,
+      vtChecked: true,
+      reasons: [
+        ...threat.reasons,
+        if (malicious > 0)
+          'VirusTotal: $malicious/$totalEngines engines flagged as malicious',
+        if (suspicious > 0)
+          'VirusTotal: $suspicious/$totalEngines engines flagged as suspicious',
+      ],
+    );
+  }
+
+  String _classifyRisk(int score) {
+    if (score >= 70) return 'HIGH';
+    if (score >= 35) return 'MEDIUM';
+    if (score >= 15) return 'LOW';
+    return 'SAFE';
   }
 
   /// Toggles real-time protection on/off.
@@ -533,6 +770,34 @@ class SecurityProvider extends ChangeNotifier {
       );
     }
     notifyListeners();
+  }
+
+  /// Toggles VirusTotal integration on/off.
+  Future<void> toggleVirusTotal(bool value) async {
+    _vtEnabled = value;
+    await _preferencesService.setVirusTotalEnabled(value);
+    if (value) {
+      await _initVirusTotalService();
+      await _logActivity(
+        'VirusTotal cloud reputation enabled (Deep Scan only)',
+        ActivityType.protection,
+      );
+    } else {
+      _virusTotalService = null;
+      await _logActivity(
+        'VirusTotal cloud reputation disabled',
+        ActivityType.protection,
+      );
+    }
+    notifyListeners();
+  }
+
+  /// Sets the VirusTotal API key securely.
+  Future<void> setVirusTotalApiKey(String apiKey) async {
+    await _preferencesService.setVirusTotalApiKey(apiKey);
+    if (_vtEnabled && apiKey.isNotEmpty) {
+      _virusTotalService = VirusTotalService(apiKey: apiKey);
+    }
   }
 
   /// Checks a URL for threats and notifies the user if detected.
@@ -660,9 +925,16 @@ class SecurityProvider extends ChangeNotifier {
     _realtimeProtection = _preferencesService.getRealtimeProtection();
     _safeBrowsing = _preferencesService.getSafeBrowsing();
     _autoScan = _preferencesService.getAutoScan();
+    _vtEnabled = _preferencesService.getVirusTotalEnabled();
     _userName = _preferencesService.getUserName();
     _userEmail = _preferencesService.getUserEmail();
-    _trustedApps = _preferencesService.getTrustedApps();
+    _trustedApps = _preferencesService.getTrustedApps().toList();
+    
+    // Auto-trust the application itself to prevent self-flagging
+    if (!_trustedApps.contains('com.ocsafe.ocsafe_cyberguard')) {
+      _trustedApps.add('com.ocsafe.ocsafe_cyberguard');
+    }
+    
     notifyListeners();
   }
 
