@@ -13,6 +13,7 @@ import 'package:ocsafe_cyberguard/screens/optimization_screen.dart';
 import 'package:ocsafe_cyberguard/models/activity_log.dart';
 import 'package:intl/intl.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 /// Main dashboard content shown on the Home tab.
 class DashboardContent extends StatefulWidget {
@@ -23,6 +24,24 @@ class DashboardContent extends StatefulWidget {
 }
 
 class _DashboardContentState extends State<DashboardContent> {
+  bool _permissionsGranted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkPermissions();
+  }
+
+  Future<void> _checkPermissions() async {
+    final notif = await Permission.notification.status;
+    final storage = await Permission.manageExternalStorage.status;
+    if (mounted) {
+      setState(() {
+        _permissionsGranted = notif.isGranted && storage.isGranted;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<SecurityProvider>(
@@ -357,13 +376,22 @@ class _DashboardContentState extends State<DashboardContent> {
               context,
               icon: Icons.lock,
               label: 'App\nPermissions',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const PermissionsScreen()),
-              ),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const PermissionsScreen()),
+                ).then((_) => _checkPermissions());
+              },
               trailing: Switch(
-                value: false,
-                onChanged: null, // Visually disabled off switch
+                value: _permissionsGranted,
+                onChanged: (val) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const PermissionsScreen()),
+                  ).then((_) => _checkPermissions());
+                },
+                activeThumbColor: Colors.white,
+                activeTrackColor: AppColors.primary,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
             ),
