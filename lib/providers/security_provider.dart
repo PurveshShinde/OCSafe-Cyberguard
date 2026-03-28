@@ -507,6 +507,15 @@ class SecurityProvider extends ChangeNotifier {
           {'token': token, 'trusted_packages': List<String>.from(_trustedApps)},
         );
 
+    // ── UX enhancement: Visually iterate over apps for the live feed ──
+    for (int i = 0; i < apps.length; i++) {
+      _scanStage = 'Analyzing: ${apps[i].appName}';
+      notifyListeners();
+      
+      // Delay so a ~100 app device takes around ~3 seconds to scan visually
+      await Future.delayed(const Duration(milliseconds: 35));
+    }
+
     _scanStage = 'Deep Scan: Analyzing app threats...';
     notifyListeners();
     await Future.delayed(const Duration(milliseconds: 150));
@@ -841,6 +850,24 @@ class SecurityProvider extends ChangeNotifier {
       _lastScanResult = _scanHistory.first;
       _threats = List.from(_lastScanResult!.threats); // Restore active threats
       _updateScore(); // Restore the previous security score based on threats
+    }
+    notifyListeners();
+  }
+
+  /// Clears all scan history from the database and memory.
+  Future<void> clearHistory() async {
+    await _databaseService.clearScanHistory();
+    _scanHistory.clear();
+    _lastScanResult = null;
+    notifyListeners();
+  }
+
+  /// Deletes a specific scan result.
+  Future<void> deleteHistoryItem(ScanResult item) async {
+    await _databaseService.deleteScanResultByDate(item.scanDate.toIso8601String());
+    _scanHistory.removeWhere((r) => r.scanDate == item.scanDate);
+    if (_lastScanResult?.scanDate == item.scanDate) {
+      _lastScanResult = _scanHistory.isNotEmpty ? _scanHistory.first : null;
     }
     notifyListeners();
   }

@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:ocsafe_cyberguard/core/theme/app_theme.dart';
 import 'package:ocsafe_cyberguard/providers/security_provider.dart';
 import 'package:ocsafe_cyberguard/models/scan_result.dart';
-import 'package:ocsafe_cyberguard/widgets/simple_card.dart';
+import 'package:ocsafe_cyberguard/widgets/glass_container.dart';
 
 import 'package:ocsafe_cyberguard/screens/report_detail_screen.dart';
 
@@ -43,10 +43,61 @@ class ReportsScreen extends StatelessWidget {
           );
         }
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: history.length,
-          itemBuilder: (context, index) => _reportTile(context, history[index]),
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Scan Reports',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  TextButton.icon(
+                    onPressed: () {
+                      context.read<SecurityProvider>().clearHistory();
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All scan reports cleared')));
+                    },
+                    icon: const Icon(Icons.delete_sweep_rounded, size: 20, color: AppColors.error),
+                    label: const Text('Clear All', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.bold)),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                itemCount: history.length,
+                itemBuilder: (context, index) {
+                  final result = history[index];
+                  return Dismissible(
+                    key: ValueKey(result.scanDate.toIso8601String()),
+                    direction: DismissDirection.endToStart,
+                    background: Container(
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 20),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: AppColors.error.withValues(alpha: 0.8),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: const Icon(Icons.delete_rounded, color: Colors.white),
+                    ),
+                    onDismissed: (_) {
+                      context.read<SecurityProvider>().deleteHistoryItem(result);
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report deleted')));
+                    },
+                    child: _reportTile(context, result),
+                  );
+                },
+              ),
+            ),
+          ],
         );
       },
     );
@@ -59,7 +110,7 @@ class ReportsScreen extends StatelessWidget {
             ? AppColors.warning
             : AppColors.error;
 
-    return SimpleCard(
+    return GlassContainer(
       margin: const EdgeInsets.only(bottom: 12),
       onTap: () {
         Navigator.push(

@@ -249,6 +249,17 @@ class DatabaseService {
     await db.delete('vt_cache');
   }
 
+  Future<void> clearScanHistory() async {
+    final db = await database;
+    await db.delete('scan_results');
+    await db.delete('threats');
+  }
+
+  Future<void> deleteScanResultByDate(String isoDate) async {
+    final db = await database;
+    await db.delete('scan_results', where: 'scan_date = ?', whereArgs: [isoDate]);
+  }
+
   // ─── VirusTotal Cache Methods ──────────────────────────────────────
 
   /// Cache a VT lookup result.

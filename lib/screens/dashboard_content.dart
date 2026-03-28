@@ -5,10 +5,11 @@ import 'package:ocsafe_cyberguard/core/theme/app_theme.dart';
 import 'package:ocsafe_cyberguard/providers/security_provider.dart';
 import 'package:ocsafe_cyberguard/services/apk_scanner.dart';
 import 'package:ocsafe_cyberguard/widgets/simple_card.dart';
+import 'package:ocsafe_cyberguard/widgets/glass_container.dart';
 import 'package:ocsafe_cyberguard/screens/scan_screen.dart';
 import 'package:ocsafe_cyberguard/screens/permissions_screen.dart';
 import 'package:ocsafe_cyberguard/screens/optimization_screen.dart';
-import 'package:ocsafe_cyberguard/screens/ChatbotScreen.dart';
+
 import 'package:ocsafe_cyberguard/models/activity_log.dart';
 import 'package:intl/intl.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -37,41 +38,6 @@ class _DashboardContentState extends State<DashboardContent> {
               const SizedBox(height: 24),
               _buildActivitySection(context, provider),
               const SizedBox(height: 24),
-              const Text(
-                'AI Security Assistant',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-              GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const ChatbotScreen(),
-                    ),
-                  );
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.purple.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.smart_toy, size: 40, color: Colors.purple),
-                      SizedBox(width: 16),
-                      Text(
-                        'Open AI Assistant',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
             ],
           ),
         );
@@ -84,19 +50,7 @@ class _DashboardContentState extends State<DashboardContent> {
     final score = provider.securityScore;
     final color = AppColors.primary; // Screenshot shows strict purple
 
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
+    return GlassContainer(
       child: Column(
         children: [
           SizedBox(
@@ -110,8 +64,8 @@ class _DashboardContentState extends State<DashboardContent> {
                   height: 180,
                   child: CircularProgressIndicator(
                     value: score / 100,
-                    strokeWidth: 16,
-                    backgroundColor: color.withValues(alpha: 0.15),
+                    strokeWidth: 6,
+                    backgroundColor: color.withValues(alpha: 0.1),
                     valueColor: AlwaysStoppedAnimation(color),
                   ),
                 ),
@@ -441,7 +395,8 @@ class _DashboardContentState extends State<DashboardContent> {
     Widget? trailing,
     VoidCallback? onTap,
   }) {
-    return SimpleCard(
+    return GlassContainer(
+      isButton: true,
       onTap: onTap,
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -499,7 +454,7 @@ class _DashboardContentState extends State<DashboardContent> {
             ),
           )
         else
-          SimpleCard(
+          GlassContainer(
             padding: EdgeInsets.zero,
             child: Column(
               children: provider.activityLogs.take(5).map((log) {
@@ -571,38 +526,32 @@ class _ScanButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ElevatedButton(
-      key: ValueKey(id),
-      onPressed: onPressed,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: onPressed == null
-            ? color.withValues(alpha: 0.4)
-            : color,
-        foregroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
-        elevation: 0,
-      ),
+    return GlassContainer(
+      isButton: true,
+      onTap: onPressed,
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
       child: isScanning
-          ? const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                valueColor: AlwaysStoppedAnimation(Colors.white),
+          ? Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  valueColor: AlwaysStoppedAnimation(color),
+                ),
               ),
             )
           : Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(icon, size: 22, color: Colors.white),
-                const SizedBox(height: 4),
+                Icon(icon, size: 26, color: color),
+                const SizedBox(height: 8),
                 Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: Colors.white,
+                    fontSize: 14,
+                    color: AppColors.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -610,7 +559,7 @@ class _ScanButton extends StatelessWidget {
                   subtitle,
                   style: TextStyle(
                     fontSize: 10,
-                    color: Colors.white.withValues(alpha: 0.85),
+                    color: AppColors.textSecondary,
                   ),
                   textAlign: TextAlign.center,
                 ),

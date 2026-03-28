@@ -3,16 +3,16 @@ import 'package:flutter/material.dart';
 /// Purple-on-white theme for OcSafe CyberGuard.
 /// This is the primary/canonical theme file used by all screens.
 class AppColors {
-  // Core palette — purple brand + white background
+  // Core palette — purple brand + subtle light background
   static const Color primary       = Color(0xFF8B5CF6);
-  static const Color primaryAccent = Color(0xFFA855F7);
-  static const Color background    = Color(0xFFFFFFFF);
-  static const Color surface       = Color(0xFFF6F3FF); // lavender card
-  static const Color surfaceLight  = Color(0xFFEDE9FE); // slightly darker lavender
+  static const Color primaryAccent = Color(0xFFA78BFA);
+  static const Color background    = Color(0xFFF8FAFC); // soft white
+  static const Color surface       = Color(0xFFFFFFFF); // solid white for elevated card fallback
+  static const Color surfaceLight  = Color(0xFFF1F5F9); // slate 100
 
   // Text
-  static const Color textPrimary   = Color(0xFF111827);
-  static const Color textSecondary = Color(0xFF6B7280);
+  static const Color textPrimary   = Color(0xFF0F172A);
+  static const Color textSecondary = Color(0xFF64748B);
 
   // Semantic
   static const Color success = Color(0xFF10B981);
@@ -20,7 +20,7 @@ class AppColors {
   static const Color error   = Color(0xFFEF4444);
 
   // Dividers / borders
-  static const Color divider = Color(0xFFE5E7EB);
+  static const Color divider = Color(0xFFE2E8F0);
 
   // Gradient
   static const LinearGradient primaryGradient = LinearGradient(
@@ -28,6 +28,9 @@ class AppColors {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
+
+  // Accent Glow
+  static Color accentGlow = const Color(0xFF8B5CF6).withValues(alpha: 0.2);
 
   // Aliases kept for legacy widget references
   static const Color card = surface;

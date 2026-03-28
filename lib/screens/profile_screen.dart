@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:ocsafe_cyberguard/core/theme/app_theme.dart';
 import 'package:ocsafe_cyberguard/providers/security_provider.dart';
-import 'package:ocsafe_cyberguard/widgets/simple_card.dart';
+import 'package:ocsafe_cyberguard/widgets/glass_container.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -27,10 +27,22 @@ class ProfileScreen extends StatelessWidget {
           child: Column(
             children: [
               // Avatar
-              const CircleAvatar(
-                radius: 48,
-                backgroundColor: AppColors.surface,
-                child: Icon(Icons.person, size: 48, color: AppColors.textSecondary),
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.accentGlow,
+                      blurRadius: 20,
+                      spreadRadius: 5,
+                    ),
+                  ],
+                ),
+                child: CircleAvatar(
+                  radius: 48,
+                  backgroundColor: Colors.white.withValues(alpha: 0.6),
+                  child: const Icon(Icons.person, size: 48, color: AppColors.primary),
+                ),
               ),
               const SizedBox(height: 16),
 
@@ -91,7 +103,7 @@ class ProfileScreen extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                    child: SimpleCard(
+                    child: GlassContainer(
                       padding: const EdgeInsets.all(16),
                       child: Column(
                         children: [
@@ -110,7 +122,7 @@ class ProfileScreen extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: SimpleCard(
+                    child: GlassContainer(
                       padding: const EdgeInsets.all(16),
                       child: Column(
                         children: [
@@ -131,7 +143,7 @@ class ProfileScreen extends StatelessWidget {
               const SizedBox(height: 24),
 
               // Scan stats
-              SimpleCard(
+              GlassContainer(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -176,7 +188,7 @@ class ProfileScreen extends StatelessWidget {
           onFieldSubmitted: onChanged,
           decoration: InputDecoration(
             filled: true,
-            fillColor: AppColors.surface,
+            fillColor: Colors.white.withValues(alpha: 0.6),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
