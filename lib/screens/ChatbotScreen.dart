@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:ocsafe_cyberguard/core/theme/app_theme.dart';
 
-/// AI Chatbot screen — opens the assistant in the device browser.
-/// webview_flutter is not in pubspec; using url_launcher (already a dependency)
-/// which is lighter and has no v3/v4 API compat issues.
 class ChatbotScreen extends StatefulWidget {
   const ChatbotScreen({super.key});
 
@@ -11,84 +8,7 @@ class ChatbotScreen extends StatefulWidget {
   State<ChatbotScreen> createState() => _ChatbotScreenState();
 }
 
-  
-
- 
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('AI Assistant'),
-        backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.textPrimary,
-        elevation: 0,
-      ),
-      body: Column(
-  children: [
-    Expanded(
-      child: ListView.builder(
-        itemCount: messages.length,
-        itemBuilder: (context, index) {
-          final msg = messages[index];
-          return Align(
-            alignment: msg["isUser"]
-                ? Alignment.centerRight
-                : Alignment.centerLeft,
-            child: Container(
-              margin: const EdgeInsets.all(8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: msg["isUser"] ? Colors.purple : Colors.grey[300],
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                msg["msg"],
-                style: TextStyle(
-                  color: msg["isUser"] ? Colors.white : Colors.black,
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    ),
-    Row(
-      children: [
-        Expanded(
-          child: TextField(
-            controller: controller,
-            decoration: const InputDecoration(
-              hintText: "Ask something...",
-            ),
-          ),
-        ),
-        IconButton(
-          icon: const Icon(Icons.send),
-          onPressed: () {
-            String userMessage = controller.text;
-
-            if (userMessage.isEmpty) return;
-
-            setState(() {
-              messages.add({"msg": userMessage, "isUser": true});
-            });
-
-            String reply = getBotReply(userMessage);
-
-            setState(() {
-              messages.add({"msg": reply, "isUser": false});
-            });
-
-            controller.clear();
-          },
-        )
-      ],
-    )
-  ],
-),
-  }
-      class _ChatbotScreenState extends State<ChatbotScreen> {
+class _ChatbotScreenState extends State<ChatbotScreen> {
 
   final TextEditingController controller = TextEditingController();
   List<Map<String, dynamic>> messages = [];
@@ -108,9 +28,16 @@ class ChatbotScreen extends StatefulWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Chatbot")),
+      appBar: AppBar(
+        title: const Text('AI Assistant'),
+        backgroundColor: AppColors.surface,
+        foregroundColor: AppColors.textPrimary,
+        elevation: 0,
+      ),
+
       body: Column(
         children: [
+
           Expanded(
             child: ListView.builder(
               itemCount: messages.length,
@@ -123,16 +50,57 @@ class ChatbotScreen extends StatefulWidget {
                   child: Container(
                     margin: const EdgeInsets.all(8),
                     padding: const EdgeInsets.all(12),
-                    color: msg["isUser"] ? Colors.purple : Colors.grey[300],
-                    child: Text(msg["msg"]),
+                    decoration: BoxDecoration(
+                      color: msg["isUser"] ? Colors.purple : Colors.grey[300],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      msg["msg"],
+                      style: TextStyle(
+                        color: msg["isUser"] ? Colors.white : Colors.black,
+                      ),
+                    ),
                   ),
                 );
               },
             ),
           ),
+
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  decoration: const InputDecoration(
+                    hintText: "Ask something...",
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.send),
+                onPressed: () {
+                  String userMessage = controller.text;
+
+                  if (userMessage.isEmpty) return;
+
+                  setState(() {
+                    messages.add({"msg": userMessage, "isUser": true});
+                  });
+
+                  String reply = getBotReply(userMessage);
+
+                  setState(() {
+                    messages.add({"msg": reply, "isUser": false});
+                  });
+
+                  controller.clear();
+                },
+              )
+            ],
+          )
+
         ],
       ),
     );
   }
-}
 }
