@@ -38,7 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
     'OcSafe CyberGuard',
     'Reports',
     'AI Assistant',
-    'Profile',
+    'Settings',
   ];
 
   @override
@@ -87,51 +87,48 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildGlassBottomNav() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-      child: Container(
-        height: 70,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(35),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(35),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            height: 70,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.7),
+              borderRadius: BorderRadius.circular(35),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.5), width: 1.5),
             ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _navItem(0, Icons.home_outlined, Icons.home),
-            _navItem(1, Icons.shield_outlined, Icons.shield),
-            GestureDetector(
-              onTap: () {
-                final provider = context.read<SecurityProvider>();
-                if (!provider.isScanning) {
-                  provider.runScan();
-                }
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const ScanScreen()));
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(20),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _navItem(0, Icons.home_outlined, Icons.home),
+                _navItem(1, Icons.analytics_outlined, Icons.analytics),
+                GestureDetector(
+                  onTap: () {
+                    final provider = context.read<SecurityProvider>();
+                    if (!provider.isScanning) {
+                      provider.runScan(ScanType.deep);
+                    }
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ScanScreen()));
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(color: AppColors.primary.withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4))
+                      ]
+                    ),
+                    child: const Icon(Icons.document_scanner_rounded, color: Colors.white, size: 24),
+                  ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.qr_code_scanner_rounded, color: AppColors.primary, size: 20),
-                    const SizedBox(width: 8),
-                    const Text('Scan', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13)),
-                  ],
-                ),
-              ),
+                _navItem(2, Icons.smart_toy_outlined, Icons.smart_toy),
+                _navItem(3, Icons.settings_outlined, Icons.settings),
+              ],
             ),
-            _navItem(2, Icons.smart_toy_outlined, Icons.smart_toy),
-            _navItem(3, Icons.person_outline, Icons.person),
-          ],
+          ),
         ),
       ),
     );

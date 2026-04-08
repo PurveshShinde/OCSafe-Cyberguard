@@ -74,13 +74,13 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            Color(0xFFFFD1DF), // Soft pink (top left)
-            Color(0xFFEAE2FF), // Soft purple (center)
-            Color(0xFFC9D8FF), // Soft light blue (bottom right)
+            Color(0xFFFFF0F5), // Lightest blush
+            Color(0xFFF5EEFF), // Very soft lavender
+            Color(0xFFEAF0FF), // Softest powder blue
           ],
-          stops: [0.0, 0.4, 1.0],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+          stops: [0.0, 0.5, 1.0],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
         ),
       ),
       child: Scaffold(
@@ -128,8 +128,19 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
                 // Hero Glass Box
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: GlassContainer(
+                  child: Container(
                     padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(30),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.04),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        )
+                      ],
+                    ),
                     child: Column(
                       children: [
                         _buildScanModeBadge(provider),
