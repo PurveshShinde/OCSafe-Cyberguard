@@ -13,6 +13,7 @@ import 'package:ocsafe_cyberguard/screens/scan_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:ocsafe_cyberguard/providers/security_provider.dart';
 import 'dart:ui';
+import 'package:url_launcher/url_launcher.dart';
 
 
 /// Main scaffold with bottom navigation and side drawer.
@@ -49,13 +50,11 @@ class _HomeScreenState extends State<HomeScreen> {
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                Color(0xFFFFD1DF), // Soft pink (top left)
-                Color(0xFFEAE2FF), // Soft purple (center)
-                Color(0xFFC9D8FF), // Soft light blue (bottom right)
+                Color(0xFFF5F3FF), // Very soft pale purple
+                Color(0xFFE0E7FF), // Extremely light indigo/purple hue
               ],
-              stops: [0.0, 0.4, 1.0],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
             ),
           ),
         ),
@@ -88,52 +87,51 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildGlassBottomNav() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(30),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            height: 70,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.6),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 1.5),
-              borderRadius: BorderRadius.circular(30),
+      child: Container(
+        height: 70,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(35),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _navItem(0, Icons.home_outlined, Icons.home),
-                _navItem(1, Icons.analytics_outlined, Icons.analytics),
-                GestureDetector(
-                  onTap: () {
-                    final provider = context.read<SecurityProvider>();
-                    if (!provider.isScanning) {
-                      provider.runScan();
-                    }
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ScanScreen()));
-                  },
-                  child: Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: AppColors.primaryGradient,
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.accentGlow,
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        )
-                      ],
-                    ),
-                    child: const Icon(Icons.shield_rounded, color: Colors.white, size: 28),
-                  ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _navItem(0, Icons.home_outlined, Icons.home),
+            _navItem(1, Icons.shield_outlined, Icons.shield),
+            GestureDetector(
+              onTap: () {
+                final provider = context.read<SecurityProvider>();
+                if (!provider.isScanning) {
+                  provider.runScan();
+                }
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const ScanScreen()));
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                _navItem(2, Icons.smart_toy_outlined, Icons.smart_toy),
-                _navItem(3, Icons.person_outline, Icons.person),
-              ],
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.qr_code_scanner_rounded, color: AppColors.primary, size: 20),
+                    const SizedBox(width: 8),
+                    const Text('Scan', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13)),
+                  ],
+                ),
+              ),
             ),
-          ),
+            _navItem(2, Icons.smart_toy_outlined, Icons.smart_toy),
+            _navItem(3, Icons.person_outline, Icons.person),
+          ],
         ),
       ),
     );
@@ -158,16 +156,7 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: Colors.transparent, // Using glass for Drawer
       child: Container(
         decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Color(0xFFFFD1DF), // Soft pink
-              Color(0xFFEAE2FF), // Soft purple
-              Color(0xFFC9D8FF), // Soft light blue 
-            ],
-            stops: [0.0, 0.4, 1.0],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          color: AppColors.surface, // Clean flat color for drawer
         ),
         child: Column(
           children: [
@@ -234,6 +223,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 _drawerItem(Icons.history, 'Scan History', () {
                   Navigator.pop(context);
                   setState(() => _currentIndex = 1);
+                }),
+                _drawerItem(Icons.vpn_key_outlined, 'VPN Service', () async {
+                  Navigator.pop(context);
+                  final Uri url = Uri.parse('https://chromewebstore.google.com/detail/majdfhpaihoncoakbjgbdhglocklcgno?utm_source=item-share-cb');
+                  if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+                    debugPrint('Could not launch $url');
+                  }
                 }),
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 8),
