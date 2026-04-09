@@ -8,6 +8,7 @@ import 'package:ocsafe_cyberguard/screens/profile_screen.dart';
 import 'package:ocsafe_cyberguard/screens/settings_screen.dart';
 import 'package:ocsafe_cyberguard/screens/permissions_screen.dart';
 import 'package:ocsafe_cyberguard/screens/optimization_screen.dart';
+import 'package:ocsafe_cyberguard/screens/theft_protection_screen.dart';
 
 import 'package:ocsafe_cyberguard/screens/scan_screen.dart';
 import 'package:provider/provider.dart';
@@ -230,6 +231,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   Navigator.pop(context);
                   Navigator.push(context,
                     MaterialPageRoute(builder: (_) => const OptimizationScreen()));
+                }),
+                _drawerItem(Icons.run_circle_outlined, 'Theft Shield', () {
+                  Navigator.pop(context);
+                  Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const TheftProtectionScreen()));
                 }),
                 _drawerItem(Icons.history, 'Scan History', () {
                   Navigator.pop(context);

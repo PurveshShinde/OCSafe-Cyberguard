@@ -1,6 +1,7 @@
 package com.ocsafe.ocsafe_cyberguard
 
 import android.content.Intent
+import com.ocsafe.ocsafe_cyberguard.theft.TheftChannelHandler
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -50,6 +51,9 @@ class MainActivity: FlutterActivity() {
 
         // Cache engine for background broadcast receiver
         FlutterEngineCache.getInstance().put("ocsafe_engine", flutterEngine)
+
+        // Smart Theft Shield — registers cyberguard/theft_lock channel
+        TheftChannelHandler(this, flutterEngine.dartExecutor.binaryMessenger)
 
         // Setup EventChannel for package events
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, EVENT_CHANNEL).setStreamHandler(
