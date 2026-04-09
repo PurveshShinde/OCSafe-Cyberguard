@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:ocsafe_cyberguard/core/theme/app_theme.dart';
 import 'package:ocsafe_cyberguard/models/scan_result.dart';
-import 'package:ocsafe_cyberguard/widgets/simple_card.dart';
 import 'package:ocsafe_cyberguard/widgets/threat_card.dart';
 import 'package:provider/provider.dart';
 import 'package:ocsafe_cyberguard/providers/security_provider.dart';
+import 'package:ocsafe_cyberguard/screens/optimization_screen.dart';
 
 class ReportDetailScreen extends StatelessWidget {
   final ScanResult result;
@@ -14,182 +14,285 @@ class ReportDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scoreColor = result.securityScore >= 80
-        ? AppColors.primary
-        : result.securityScore >= 50
-            ? AppColors.warning
-            : AppColors.error;
+    // Determine status
+    final isSecure = result.threatCount == 0;
+    final statusColor = isSecure ? AppColors.success : AppColors.error;
+    final statusText = isSecure ? 'Secure' : 'Risks Found';
+    final statusSubText = isSecure ? 'Monitoring suspicious activity.' : '${result.threatCount} threats require your attention.';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Detailed Scan Report')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Report Header
-            SimpleCard(
-              padding: const EdgeInsets.all(20),
-              child: Row(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: const Text('Viruses & risks', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
+      body: Stack(
+        children: [
+          ListView(
+            padding: const EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 32),
+            children: [
+              // HEADER
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  SizedBox(
-                    width: 70,
-                    height: 70,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        CircularProgressIndicator(
-                          value: result.securityScore / 100,
-                          strokeWidth: 6,
-                          backgroundColor: AppColors.surfaceLight,
-                          valueColor: AlwaysStoppedAnimation(scoreColor),
-                        ),
-                        Text(
-                          '${result.securityScore}',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                color: scoreColor,
-                                fontWeight: FontWeight.bold,
-                              ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 20),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Security Score',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          DateFormat.yMMMd().add_jm().format(result.scanDate),
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            const Icon(Icons.grid_view, size: 14, color: AppColors.textSecondary),
-                            const SizedBox(width: 6),
-                            Text('${result.totalAppsScanned} apps scanned', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const Icon(Icons.warning, size: 14, color: AppColors.textSecondary),
-                            const SizedBox(width: 6),
-                            Text('${result.threatCount} threats found', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: result.isFullScan
-                                ? AppColors.primary.withValues(alpha: 0.1)
-                                : AppColors.warning.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(12),
+                          statusText,
+                          style: TextStyle(
+                            fontSize: 34,
+                            fontWeight: FontWeight.w900,
+                            color: statusColor,
                           ),
-                          child: Text(
-                            result.isFullScan ? 'Full Scan' : 'Limited Scan',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: result.isFullScan ? AppColors.primary : AppColors.warning,
-                            ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          statusSubText,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppColors.textSecondary,
                           ),
                         ),
                       ],
                     ),
                   ),
+                  Container(
+                    width: 90,
+                    height: 90,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: statusColor.withValues(alpha: 0.15),
+                    ),
+                    alignment: Alignment.center,
+                    child: Container(
+                      width: 65,
+                      height: 65,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: statusColor,
+                        boxShadow: [
+                          BoxShadow(
+                            color: statusColor.withValues(alpha: 0.4),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          )
+                        ],
+                      ),
+                      child: Icon(
+                        isSecure ? Icons.bolt_rounded : Icons.warning_rounded,
+                        color: Colors.white,
+                        size: 36,
+                      ),
+                    ),
+                  ),
                 ],
               ),
-            ),
-            const SizedBox(height: 24),
+              const SizedBox(height: 32),
 
-            // Threat Summary Section
-            Text('Threat Summary', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 12),
-            if (result.threats.isEmpty)
-              SimpleCard(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
+              // Recommended optimizations
+              const Text(
+                'Recommended optimizations',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    _buildOptimizationTile(
+                      context: context,
+                      icon: Icons.rocket_launch_rounded,
+                      iconColor: AppColors.primary,
+                      title: 'System boost',
+                      subtitle: 'Close background apps to make your device run faster.',
+                      onTap: () {
+                         Navigator.push(context, MaterialPageRoute(builder: (_) => const OptimizationScreen()));
+                      }
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Threat summary (Replace "Block suspicious app activities" when risks exist)
+              if (!isSecure) ...[
+                const Text(
+                  'Threats detected',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 12),
+                ...result.threats.map((t) => ThreatCard(threat: t)),
+                const SizedBox(height: 24),
+              ] else ...[
+                 // Block suspicious app activities (Safe state box mimicking screenshot)
+                 Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))
+                    ],
+                  ),
                   child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Icon(Icons.verified_user, color: AppColors.primary, size: 40),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Text(
-                          'Excellent! Your device is secure. No suspicious apps or risky permissions were detected.',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text('Block suspicious app activities', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textPrimary)),
+                          SizedBox(height: 4),
+                          Text('No blocking history', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                        ],
                       ),
+                      const Icon(Icons.chevron_right, color: AppColors.textSecondary),
                     ],
                   ),
                 ),
-              )
-            else
-              ...result.threats.map((t) => ThreatCard(threat: t)),
+                const SizedBox(height: 24),
+              ],
 
-            const SizedBox(height: 24),
+              // Scan records
+              const Text(
+                'Scan records',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 12),
+              Consumer<SecurityProvider>(
+                builder: (context, provider, _) {
+                  final history = provider.scanHistory.take(5).toList();
+                  if (history.isEmpty) {
+                    history.add(result); // Fallback to current result if history is empty
+                  }
+                  
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))
+                      ],
+                    ),
+                    child: Column(
+                      children: history.asMap().entries.map((entry) {
+                         final index = entry.key;
+                         final scan = entry.value;
+                         final isLast = index == history.length - 1;
+                         return Column(
+                           children: [
+                             _buildScanRecordTile(scan),
+                             if (!isLast)
+                               const Divider(height: 1, indent: 16, endIndent: 16),
+                           ],
+                         );
+                      }).toList(),
+                    ),
+                  );
+                },
+              ),
+              
+              const SizedBox(height: 32),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
-            // Help section
-            const Text('What does this mean?', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textPrimary)),
-            const SizedBox(height: 8),
-            const Text(
-              'OcSafe CyberGuard analyzes your installed apps and their permissions. '
-              'Apps that request dangerous combinations of permissions or have suspicious names are flagged for your review. '
-              'This is a local heuristics scan; if an app is flagged, consider whether you trust its source before uninstalling.',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
+  Widget _buildOptimizationTile({
+    required BuildContext context,
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
             ),
-            const SizedBox(height: 24),
-
-            // Device Health Section
-            const Text('Device Security Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textPrimary)),
-            const SizedBox(height: 12),
-            Consumer<SecurityProvider>(
-              builder: (context, provider, _) {
-                final health = provider.deviceData;
-                if (health == null) return const SizedBox.shrink();
-
-                return SimpleCard(
-                  child: Column(
-                    children: [
-                      ListTile(
-                        leading: const Icon(Icons.phone_android, color: AppColors.textSecondary),
-                        title: const Text('Device Model', style: TextStyle(fontSize: 14)),
-                        trailing: Text(health.deviceModel, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                      const Divider(height: 1),
-                      ListTile(
-                        leading: const Icon(Icons.system_update, color: AppColors.textSecondary),
-                        title: const Text('Android Version', style: TextStyle(fontSize: 14)),
-                        trailing: Text(health.androidVersion, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                      const Divider(height: 1),
-                      ListTile(
-                        leading: const Icon(Icons.battery_std, color: AppColors.textSecondary),
-                        title: const Text('Battery Level', style: TextStyle(fontSize: 14)),
-                        trailing: Text('${health.batteryLevel}%', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                      const Divider(height: 1),
-                      ListTile(
-                        leading: const Icon(Icons.storage, color: AppColors.textSecondary),
-                        title: const Text('Storage Used', style: TextStyle(fontSize: 14)),
-                        trailing: Text('${health.storageUsedPercentage}%', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                    ],
-                  ),
-                );
-              },
+            child: Icon(icon, color: iconColor, size: 24),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textPrimary)),
+                const SizedBox(height: 4),
+                Text(subtitle, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+              ],
             ),
+          ),
+          const SizedBox(width: 12),
+          ElevatedButton(
+            onPressed: onTap,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.surfaceLight,
+              foregroundColor: AppColors.textPrimary,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              minimumSize: Size.zero,
+            ),
+            child: const Text('Go', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
 
-            const SizedBox(height: 32),
-          ],
-        ),
+  Widget _buildScanRecordTile(ScanResult scan) {
+    String scanTitle = scan.isFullScan ? 'Manual scan' : 'Installation scan';
+    String description = scan.threatCount == 0
+       ? 'Scanned ${scan.totalAppsScanned} items. No risky apps found.'
+       : 'Scanned ${scan.totalAppsScanned} items. ${scan.threatCount} risks found.';
+       
+    // Check if scan is very recent
+    final diff = DateTime.now().difference(scan.scanDate);
+    String timeStr = 'Just now';
+    if (diff.inMinutes > 2) {
+      timeStr = DateFormat('h:mm:ss a').format(scan.scanDate);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(scanTitle, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textPrimary)),
+                const SizedBox(height: 4),
+                Text(description, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                const SizedBox(height: 8),
+                Text(timeStr, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

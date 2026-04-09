@@ -97,8 +97,8 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                 },
               )
             ],
-          )
-
+          ),
+          const SizedBox(height: 90),
         ],
       ),
     );

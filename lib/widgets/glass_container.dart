@@ -71,17 +71,17 @@ class _GlassContainerState extends State<GlassContainer> with SingleTickerProvid
       height: widget.height,
       padding: widget.padding,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.6),
+        color: Colors.white,
         borderRadius: clipRadius,
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.4),
-          width: 1.5,
+          color: Colors.black.withValues(alpha: 0.05),
+          width: 1.0,
         ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
@@ -106,10 +106,7 @@ class _GlassContainerState extends State<GlassContainer> with SingleTickerProvid
         scale: _scaleAnimation,
         child: ClipRRect(
           borderRadius: clipRadius,
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 25.0, sigmaY: 25.0),
-            child: content,
-          ),
+          child: content,
         ),
       ),
     );

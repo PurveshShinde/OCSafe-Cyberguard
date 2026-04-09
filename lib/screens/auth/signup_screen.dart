@@ -97,52 +97,70 @@ class _SignupScreenState extends State<SignupScreen> {
       backgroundColor: Colors.white,
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 30),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const Icon(Icons.account_circle, size: 80, color: Colors.purple),
-              const SizedBox(height: 10),
-              const Text(
-                "OCSafe Cybersafe",
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              const SizedBox(height: 40),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.purple.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.security, size: 50, color: Colors.purple),
               ),
+              const SizedBox(height: 24),
               const Text(
-                "Sign up to get started!",
-                style: TextStyle(color: Colors.grey),
+                "Create Account",
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.black87),
               ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 8),
+              const Text(
+                "Sign up to protect your device",
+                style: TextStyle(color: Colors.grey, fontSize: 14),
+              ),
+              const SizedBox(height: 40),
 
               // Full Name
-              _buildTextField("Full Name", _nameController, Icons.person_outline),
-              const SizedBox(height: 15),
+              _buildInputLabel("Full Name"),
+              _buildTextField(
+                "John Doe",
+                _nameController,
+                Icons.person_outline,
+              ),
+              const SizedBox(height: 20),
 
               // Email
+              _buildInputLabel("Email"),
               _buildTextField(
-                "Email Address",
+                "example@youremail.com",
                 _emailController,
                 Icons.mail_outline,
                 keyboardType: TextInputType.emailAddress,
               ),
-              const SizedBox(height: 15),
+              const SizedBox(height: 20),
 
               // Password
+              _buildInputLabel("Password"),
               _buildPasswordField(
-                "Password",
+                "**********",
                 _passwordController,
                 _obscurePassword,
                 () => setState(() => _obscurePassword = !_obscurePassword),
               ),
-              const SizedBox(height: 15),
+              const SizedBox(height: 20),
 
               // Confirm Password
+              _buildInputLabel("Confirm Password"),
               _buildPasswordField(
-                "Confirm Password",
+                "**********",
                 _confirmController,
                 _obscureConfirm,
                 () => setState(() => _obscureConfirm = !_obscureConfirm),
               ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 32),
 
               // Sign Up Button
               SizedBox(
@@ -153,11 +171,16 @@ class _SignupScreenState extends State<SignupScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.purple,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                     ),
+                    elevation: 0,
                   ),
                   child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
+                      ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
                       : const Text(
                           "Sign Up",
                           style: TextStyle(
@@ -168,19 +191,20 @@ class _SignupScreenState extends State<SignupScreen> {
                         ),
                 ),
               ),
-
-              const SizedBox(height: 20),
+              
+              const SizedBox(height: 32),
+              
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text("Already have an account? "),
+                  const Text("Already have an account? ", style: TextStyle(color: Colors.black87)),
                   GestureDetector(
                     onTap: () => Navigator.pushReplacement(
                       context,
                       MaterialPageRoute(builder: (_) => const LoginScreen()),
                     ),
                     child: const Text(
-                      "Sign in",
+                      "Sign In",
                       style: TextStyle(
                         color: Colors.purple,
                         fontWeight: FontWeight.bold,
@@ -196,8 +220,18 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
+  Widget _buildInputLabel(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0, left: 4.0),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(text, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87)),
+      ),
+    );
+  }
+
   Widget _buildTextField(
-    String label,
+    String hint,
     TextEditingController controller,
     IconData icon, {
     TextInputType keyboardType = TextInputType.text,
@@ -206,17 +240,26 @@ class _SignupScreenState extends State<SignupScreen> {
       controller: controller,
       keyboardType: keyboardType,
       decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon),
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+        prefixIcon: Icon(icon, color: Colors.grey.shade600),
         filled: true,
-        fillColor: Colors.grey[50],
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(vertical: 16),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: Colors.grey.shade300)
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Colors.purple, width: 1.5)
+        ),
       ),
     );
   }
 
   Widget _buildPasswordField(
-    String label,
+    String hint,
     TextEditingController controller,
     bool obscure,
     VoidCallback toggle,
@@ -225,15 +268,24 @@ class _SignupScreenState extends State<SignupScreen> {
       controller: controller,
       obscureText: obscure,
       decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: const Icon(Icons.lock_outline),
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+        prefixIcon: Icon(Icons.lock_outline, color: Colors.grey.shade600),
         suffixIcon: IconButton(
-          icon: Icon(obscure ? Icons.visibility_off : Icons.visibility),
+          icon: Icon(obscure ? Icons.visibility_off : Icons.visibility, color: Colors.grey.shade600),
           onPressed: toggle,
         ),
         filled: true,
-        fillColor: Colors.grey[50],
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(vertical: 16),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: Colors.grey.shade300)
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Colors.purple, width: 1.5)
+        ),
       ),
     );
   }

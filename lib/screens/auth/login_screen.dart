@@ -17,6 +17,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _rememberMe = false;
 
   @override
   void dispose() {
@@ -70,47 +71,81 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 30),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const Icon(Icons.account_circle, size: 80, color: Colors.purple),
-              const SizedBox(height: 10),
+              const SizedBox(height: 40),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.purple.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.security, size: 50, color: Colors.purple),
+              ),
+              const SizedBox(height: 24),
               const Text(
                 "Welcome Back",
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.black87),
               ),
+              const SizedBox(height: 8),
               const Text(
-                "Sign in to OCSafe Cybersafe",
-                style: TextStyle(color: Colors.grey),
+                "Sign up to protect your device",
+                style: TextStyle(color: Colors.grey, fontSize: 14),
               ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 40),
 
               // Email
+              _buildInputLabel("Email"),
               _buildTextField(
-                "Email Address",
+                "example@youremail.com",
                 _emailController,
                 Icons.mail_outline,
                 keyboardType: TextInputType.emailAddress,
               ),
-              const SizedBox(height: 15),
+              const SizedBox(height: 20),
 
               // Password
+              _buildInputLabel("Password"),
               _buildPasswordField(
-                "Password",
+                "**********",
                 _passwordController,
                 _obscurePassword,
                 () => setState(() => _obscurePassword = !_obscurePassword),
               ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 12),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      SizedBox(
+                        height: 24,
+                        width: 24,
+                        child: Checkbox(
+                          value: _rememberMe,
+                          onChanged: (val) => setState(() => _rememberMe = val ?? false),
+                          activeColor: Colors.purple,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Text("Remember Me", style: TextStyle(color: Colors.grey, fontSize: 13)),
+                    ],
+                  ),
+                  const Text("Forget Password?", style: TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.w600)),
+                ],
+              ),
+              const SizedBox(height: 32),
 
               // Sign In Button
               SizedBox(
@@ -121,8 +156,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.purple,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                     ),
+                    elevation: 0,
                   ),
                   child: _isLoading
                       ? const SizedBox(
@@ -140,21 +176,43 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                 ),
               ),
-
-
-
-              const SizedBox(height: 20),
+              
+              const SizedBox(height: 32),
+              Row(
+                children: [
+                  const Expanded(child: Divider(color: Colors.grey, thickness: 0.5)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Text('or', style: TextStyle(color: Colors.grey.shade600)),
+                  ),
+                  const Expanded(child: Divider(color: Colors.grey, thickness: 0.5)),
+                ],
+              ),
+              const SizedBox(height: 24),
+              
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text("Don't have an account? "),
+                  _socialIcon(Icons.apple),
+                  const SizedBox(width: 24),
+                  _socialIcon(Icons.facebook, color: Colors.blue),
+                  const SizedBox(width: 24),
+                  _socialIcon(Icons.g_mobiledata, color: Colors.red, size: 36), // A bit larger for google text icon
+                ],
+              ),
+
+              const SizedBox(height: 40),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text("Don't have any Account? ", style: TextStyle(color: Colors.black87)),
                   GestureDetector(
                     onTap: () => Navigator.pushReplacement(
                       context,
                       MaterialPageRoute(builder: (_) => const SignupScreen()),
                     ),
                     child: const Text(
-                      "Sign up",
+                      "Sign Up",
                       style: TextStyle(
                         color: Colors.purple,
                         fontWeight: FontWeight.bold,
@@ -170,8 +228,32 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  Widget _buildInputLabel(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0, left: 4.0),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(text, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87)),
+      ),
+    );
+  }
+
+  Widget _socialIcon(IconData icon, {Color color = Colors.black, double size = 28}) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))
+        ]
+      ),
+      child: Icon(icon, color: color, size: size),
+    );
+  }
+
   Widget _buildTextField(
-    String label,
+    String hint,
     TextEditingController controller,
     IconData icon, {
     TextInputType keyboardType = TextInputType.text,
@@ -180,17 +262,26 @@ class _LoginScreenState extends State<LoginScreen> {
       controller: controller,
       keyboardType: keyboardType,
       decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon),
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+        prefixIcon: Icon(icon, color: Colors.grey.shade600),
         filled: true,
-        fillColor: Colors.grey[50],
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(vertical: 16),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: Colors.grey.shade300)
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Colors.purple, width: 1.5)
+        ),
       ),
     );
   }
 
   Widget _buildPasswordField(
-    String label,
+    String hint,
     TextEditingController controller,
     bool obscure,
     VoidCallback toggle,
@@ -199,15 +290,24 @@ class _LoginScreenState extends State<LoginScreen> {
       controller: controller,
       obscureText: obscure,
       decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: const Icon(Icons.lock_outline),
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+        prefixIcon: Icon(Icons.lock_outline, color: Colors.grey.shade600),
         suffixIcon: IconButton(
-          icon: Icon(obscure ? Icons.visibility_off : Icons.visibility),
+          icon: Icon(obscure ? Icons.visibility_off : Icons.visibility, color: Colors.grey.shade600),
           onPressed: toggle,
         ),
         filled: true,
-        fillColor: Colors.grey[50],
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(vertical: 16),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: Colors.grey.shade300)
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Colors.purple, width: 1.5)
+        ),
       ),
     );
   }
