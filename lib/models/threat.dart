@@ -1,3 +1,41 @@
+/// Structured explanation of WHY an app is risky.
+///
+/// Separates *what was detected* from *how severe* it is, allowing
+/// the UI to present human-readable context instead of raw scores.
+class RiskContext {
+  /// The inferred functional role of the app (e.g. 'App Installer').
+  final String appRole;
+
+  /// Human-readable install source (e.g. 'ADB / Direct Install').
+  final String installSourceLabel;
+
+  /// Active high-risk capabilities detected on this app.
+  /// Examples: ['CAN_INSTALL_APPS', 'DEVICE_ADMIN', 'ACCESSIBILITY_ABUSE']
+  final List<String> capabilityFlags;
+
+  const RiskContext({
+    required this.appRole,
+    required this.installSourceLabel,
+    this.capabilityFlags = const [],
+  });
+
+  Map<String, dynamic> toMap() => {
+        'appRole': appRole,
+        'installSourceLabel': installSourceLabel,
+        'capabilityFlags': capabilityFlags.join('|'),
+      };
+
+  factory RiskContext.fromMap(Map<String, dynamic> map) => RiskContext(
+        appRole: map['appRole'] as String? ?? 'Unknown Role',
+        installSourceLabel:
+            map['installSourceLabel'] as String? ?? 'Unknown Source',
+        capabilityFlags:
+            (map['capabilityFlags'] as String? ?? '').isEmpty
+                ? []
+                : (map['capabilityFlags'] as String).split('|'),
+      );
+}
+
 /// Represents a detected security threat.
 class Threat {
   final int? id;
@@ -17,8 +55,11 @@ class Threat {
   final int? vtSuspicious;
   final bool vtChecked;
 
-  // ── Confidence score (0–100): how many independent signals agree ──
+  // ── Confidence score (0–100): certainty of the detection, separate from severity ──
   final int confidence;
+
+  // ── Structured risk explanation ──
+  final RiskContext? riskContext;
 
   const Threat({
     this.id,
@@ -35,6 +76,7 @@ class Threat {
     this.vtSuspicious,
     this.vtChecked = false,
     this.confidence = 0,
+    this.riskContext,
   });
 
   /// Creates a copy with optional field overrides.
@@ -47,6 +89,7 @@ class Threat {
     int? vtSuspicious,
     bool? vtChecked,
     int? confidence,
+    RiskContext? riskContext,
   }) {
     return Threat(
       id: id,
@@ -63,6 +106,7 @@ class Threat {
       vtSuspicious: vtSuspicious ?? this.vtSuspicious,
       vtChecked: vtChecked ?? this.vtChecked,
       confidence: confidence ?? this.confidence,
+      riskContext: riskContext ?? this.riskContext,
     );
   }
 

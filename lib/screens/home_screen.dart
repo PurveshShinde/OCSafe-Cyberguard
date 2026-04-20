@@ -13,6 +13,7 @@ import 'package:ocsafe_cyberguard/screens/theft_protection_screen.dart';
 import 'package:ocsafe_cyberguard/screens/scan_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:ocsafe_cyberguard/providers/security_provider.dart';
+import 'package:ocsafe_cyberguard/services/apk_scanner.dart';
 import 'dart:ui';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -106,12 +107,28 @@ class _HomeScreenState extends State<HomeScreen> {
                 _navItem(0, Icons.home_outlined, Icons.home),
                 _navItem(1, Icons.analytics_outlined, Icons.analytics),
                 GestureDetector(
-                  onTap: () {
+                  onTap: () async {
                     final provider = context.read<SecurityProvider>();
                     if (!provider.isScanning) {
+                      final apkScanner = ApkScanner();
+                      bool hasPerm = await apkScanner.hasStoragePermission();
+                      if (!hasPerm) {
+                        hasPerm = await apkScanner.requestStoragePermission();
+                        if (!hasPerm && context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Storage permission is required to scan files and ZIPs.'),
+                              duration: Duration(seconds: 3),
+                            ),
+                          );
+                        }
+                      }
+                      
                       provider.runScan(ScanType.deep);
                     }
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ScanScreen()));
+                    if (context.mounted) {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const ScanScreen()));
+                    }
                   },
                   child: Container(
                     padding: const EdgeInsets.all(12),

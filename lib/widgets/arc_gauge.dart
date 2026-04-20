@@ -19,20 +19,9 @@ class ArcGauge extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(
-                  '${score.toInt()}%',
-                  style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: valueColor),
-                ),
-                const Text(
-                  '/100',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.grey),
-                ),
-              ],
+            Text(
+              '${score.toInt()}%',
+              style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: valueColor),
             ),
             const SizedBox(height: 4),
             const Text(

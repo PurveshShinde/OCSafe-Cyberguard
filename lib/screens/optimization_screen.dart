@@ -89,7 +89,7 @@ class _OptimizationScreenState extends State<OptimizationScreen> {
                 _infoTile(context, 'Android Version', device.androidVersion, Icons.android),
                 _infoTile(context, 'Storage Used', '${device.storageUsedPercentage}%', Icons.storage),
                 _infoTile(context, 'Junk Cache', '${device.cacheSizeMB} MB', Icons.cleaning_services),
-                _infoTile(context, 'Health Score', '${device.healthScore}/100', Icons.health_and_safety),
+                _infoTile(context, 'Health Score', '${device.healthScore}%', Icons.health_and_safety),
               ] else
                 const SimpleCard(
                   child: Center(
@@ -209,8 +209,15 @@ class _OptimizationScreenState extends State<OptimizationScreen> {
           Icon(icon, color: AppColors.textSecondary, size: 20),
           const SizedBox(width: 12),
           Text(label, style: Theme.of(context).textTheme.bodyMedium),
-          const Spacer(),
-          Text(value, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              value, 
+              style: Theme.of(context).textTheme.titleMedium,
+              textAlign: TextAlign.right,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );

@@ -40,14 +40,11 @@ class PackageReceiver : BroadcastReceiver() {
          */
         val TRUSTED_INSTALLERS = setOf(
             "com.android.vending",                  // Google Play Store
-            "com.google.android.packageinstaller",  // Google default package installer
-            "com.android.packageinstaller",         // AOSP package installer
-            "com.miui.packageinstaller",            // Xiaomi / MIUI
-            "com.samsung.android.packageinstaller", // Samsung
-            "com.oneplus.packageinstaller",         // OnePlus
-            "com.coloros.packageinstaller",         // ColorOS / OPPO / realme
+            "com.sec.android.app.samsungapps",      // Samsung Galaxy Store
             "com.huawei.appmarket",                 // Huawei AppGallery
-            "com.amazon.venezia"                    // Amazon Appstore
+            "com.amazon.venezia",                   // Amazon Appstore
+            "com.xiaomi.mipicks",                   // Xiaomi GetApps
+            "com.heytap.market"                     // OPPO/Realme App Market
         )
     }
 
@@ -163,6 +160,37 @@ class PackageReceiver : BroadcastReceiver() {
                 headlessEngine!!.dartExecutor.binaryMessenger,
                 BACKGROUND_CHANNEL
             )
+
+            // Register native app permissions extractor channel
+            val PERMISSIONS_CHANNEL = "com.ocsafe.cyberguard/permissions"
+            MethodChannel(headlessEngine!!.dartExecutor.binaryMessenger, PERMISSIONS_CHANNEL).setMethodCallHandler { call, result ->
+                val pkg = call.argument<String>("packageName") ?: ""
+                val pm = context.packageManager
+                when (call.method) {
+                    "getPermissions" -> {
+                        try {
+                            val pkgInfo = pm.getPackageInfo(pkg, android.content.pm.PackageManager.GET_PERMISSIONS)
+                            result.success(pkgInfo.requestedPermissions?.toList() ?: emptyList<String>())
+                        } catch (e: Exception) {
+                            result.success(emptyList<String>())
+                        }
+                    }
+                    "getInstaller" -> {
+                        try {
+                            val installer = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                                pm.getInstallSourceInfo(pkg).installingPackageName
+                            } else {
+                                @Suppress("DEPRECATION")
+                                pm.getInstallerPackageName(pkg)
+                            }
+                            result.success(installer)
+                        } catch (e: Exception) {
+                            result.success(null)
+                        }
+                    }
+                    else -> result.notImplemented()
+                }
+            }
 
             methodChannel.setMethodCallHandler { call, result ->
                 when (call.method) {

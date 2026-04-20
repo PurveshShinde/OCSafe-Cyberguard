@@ -140,10 +140,6 @@ class ApkScanner {
     return backgroundFoundFiles.toSet().toList();
   }
 
-  static const _storageChannel = MethodChannel(
-    'com.ocsafe.cyberguard/storage_permission',
-  );
-
   Future<bool> hasStoragePermission() async {
     if (!Platform.isAndroid) return false;
 
@@ -151,17 +147,7 @@ class ApkScanner {
       final androidInfo = await DeviceInfoPlugin().androidInfo;
 
       if (androidInfo.version.sdkInt >= 30) {
-        final bool granted =
-            await _storageChannel.invokeMethod<bool>(
-              'check_all_files_access',
-            ) ??
-            false;
-
-        debugPrint(
-          '[ApkScanner] hasStoragePermission (API${androidInfo.version.sdkInt}): $granted',
-        );
-
-        return granted;
+        return await Permission.manageExternalStorage.isGranted;
       } else {
         return await Permission.storage.isGranted;
       }
@@ -181,24 +167,16 @@ class ApkScanner {
       debugPrint('[ApkScanner] requestStoragePermission (API$sdkInt)');
 
       if (sdkInt >= 30) {
-        final bool alreadyGranted =
-            await _storageChannel.invokeMethod<bool>(
-              'request_all_files_access',
-            ) ??
-            false;
-
-        debugPrint(
-          '[ApkScanner] request_all_files_access returned: $alreadyGranted',
-        );
-
-        return alreadyGranted;
+        PermissionStatus status = await Permission.manageExternalStorage.status;
+        if (!status.isGranted) {
+          status = await Permission.manageExternalStorage.request();
+        }
+        return status.isGranted;
       } else {
         PermissionStatus status = await Permission.storage.status;
-
         if (!status.isGranted) {
           status = await Permission.storage.request();
         }
-
         return status.isGranted;
       }
     } catch (e) {

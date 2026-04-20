@@ -248,24 +248,10 @@ class SecurityProvider extends ChangeNotifier {
       return;
     }
 
-    // ─── Play Store / Trusted Source Install ───────────────────────────────
-    // Play Store manages its own security. Skip deep scan entirely and just log.
-    if (!isSideloaded) {
-      print('DEBUG: $packageName installed from trusted source. Log only.');
-      final appInfo = await _appScanner.fetchAppWithPermissions(packageName);
-      if (appInfo != null) {
-        await _logActivity(
-          'Play Store install: ${appInfo.appName} — trusted source, skipping deep scan.',
-          ActivityType.protection,
-        );
-      }
-      return;
-    }
-
-    // ─── Sideloaded APK — Full Deep Scan ──────────────────────────────────
+    // ─── Application Scan ──────────────────────────────────────────────────
     print(
-      'DEBUG: scanSingleAppHeadless — SIDELOADED scan for $packageName '
-      '(isUpdate=$isUpdate)',
+      'DEBUG: scanSingleAppHeadless — Background scan for $packageName '
+      '(isSideloaded=$isSideloaded, isUpdate=$isUpdate)',
     );
 
     // Retry up to 3 times: the OS may take a moment to manifest the new install
@@ -285,12 +271,12 @@ class SecurityProvider extends ChangeNotifier {
 
       if (threat != null &&
           (threat.riskLevel == 'HIGH' || threat.riskLevel == 'MEDIUM')) {
-        // ── Dangerous sideloaded APK → notify the user ──────────────────
+        // ── Dangerous APK → notify the user ─────────────────────────────────
         print(
           'DEBUG: Threat detected! ${threat.appName} (${threat.riskLevel})',
         );
         await _logActivity(
-          'Sideload Detection: ${threat.appName} flagged as ${threat.riskLevel} risk! '
+          'Real-time Detection: ${threat.appName} flagged as ${threat.riskLevel} risk! '
           'Reason: ${threat.reasons.first}',
           ActivityType.threat,
         );
@@ -301,10 +287,10 @@ class SecurityProvider extends ChangeNotifier {
           packageName: threat.packageName,
         );
       } else {
-        // ── Safe or LOW-risk sideloaded APK → silent log only ───────────
-        print('DEBUG: Sideloaded app is safe — no notification.');
+        // ── Safe or LOW-risk APK → silent log only ──────────────────────────
+        print('DEBUG: App is low risk or safe (${threat?.riskLevel}) — no notification.');
         await _logActivity(
-          'Sideload Scanner: ${appInfo.appName} installed — no threats found.',
+          'Real-time Scanner: ${appInfo.appName} installed — no threats found.',
           ActivityType.protection,
         );
       }
@@ -541,7 +527,10 @@ class SecurityProvider extends ChangeNotifier {
     // ── PHASE 1: Show local results IMMEDIATELY (no blocking) ──────────
     _scanStage = 'Deep Scan: Local analysis complete. Cloud check running...';
     final seen = <String>{};
-    _threats = detectedThreats.where((t) => seen.add(t.packageName)).toList();
+    // Filter out LOW risk threats entirely so they don't bloat the dashboard threat count
+    _threats = detectedThreats
+        .where((t) => t.riskLevel != 'LOW' && seen.add(t.packageName))
+        .toList();
     _updateScore();
 
     _lastScanResult = ScanResult(
@@ -703,6 +692,26 @@ class SecurityProvider extends ChangeNotifier {
         return _applyVTResult(threat, vtResult.malicious, vtResult.suspicious, vtResult.totalEngines);
       } else {
         debugPrint('DEBUG [VT Pipeline]: VT returned null (404/timeout) → ${threat.packageName}. Fallback to local score.');
+
+        // Priority 2: VT fallback boost — unknown sideloaded installer gets +10
+        // If hash not in VT DB AND app is sideloaded AND can install other apps
+        // → slight risk boost to surface it from LOW toward MEDIUM
+        if (appInfo != null) {
+          final features = AppFeatures.fromAppInfo(appInfo);
+          if (features.isSideloaded && features.hasInstallPackagesPerm) {
+            final boostedScore = (threat.threatScore + 10).clamp(0, 100);
+            debugPrint('DEBUG [VT Pipeline]: Unknown sideloaded installer → +10 boost. Score: ${threat.threatScore} → $boostedScore');
+            return threat.copyWith(
+              threatScore: boostedScore,
+              riskLevel: _classifyRisk(boostedScore),
+              reasons: [
+                ...threat.reasons,
+                'VirusTotal: not found in cloud database — unknown sideloaded installer',
+              ],
+            );
+          }
+        }
+
         return threat;
       }
     } catch (e) {

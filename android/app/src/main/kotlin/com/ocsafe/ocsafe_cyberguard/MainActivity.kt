@@ -185,5 +185,35 @@ class MainActivity: FlutterActivity() {
                 result.notImplemented()
             }
         }
+
+        // Native permissions extractor channel
+        val PERMISSIONS_CHANNEL = "com.ocsafe.cyberguard/permissions"
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, PERMISSIONS_CHANNEL).setMethodCallHandler { call, result ->
+            val pkgName = call.argument<String>("packageName") ?: ""
+            when (call.method) {
+                "getPermissions" -> {
+                    try {
+                        val packageInfo = packageManager.getPackageInfo(pkgName, PackageManager.GET_PERMISSIONS)
+                        result.success(packageInfo.requestedPermissions?.toList() ?: emptyList<String>())
+                    } catch (e: Exception) {
+                        result.success(emptyList<String>())
+                    }
+                }
+                "getInstaller" -> {
+                    try {
+                        val installer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            packageManager.getInstallSourceInfo(pkgName).installingPackageName
+                        } else {
+                            @Suppress("DEPRECATION")
+                            packageManager.getInstallerPackageName(pkgName)
+                        }
+                        result.success(installer)
+                    } catch (e: Exception) {
+                        result.success(null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
     }
 }

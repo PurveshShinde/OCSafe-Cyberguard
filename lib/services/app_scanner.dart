@@ -40,10 +40,30 @@ class AppScanner {
     'com.amazon.',
   ];
 
+  static const MethodChannel _permissionsChannel = MethodChannel('com.ocsafe.cyberguard/permissions');
+
+  Future<List<String>> _getNativePermissions(String packageName) async {
+    try {
+      final List<String>? perms = await _permissionsChannel.invokeListMethod<String>('getPermissions', {'packageName': packageName});
+      return perms ?? [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<String?> _getNativeInstaller(String packageName) async {
+    try {
+      final String? installer = await _permissionsChannel.invokeMethod<String>('getInstaller', {'packageName': packageName});
+      return installer;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Maps Application → AppInfo
-  AppInfo mapToAppInfo(Application app, {required bool hasLaunchIntent}) {
-    final installSource = _safeInstallerPackage(app);
-    final permissions = _safePermissions(app);
+  AppInfo mapToAppInfo(Application app, {required bool hasLaunchIntent, List<String>? injectedPerms, String? nativeInstaller}) {
+    final installSource = nativeInstaller ?? _safeInstallerPackage(app);
+    final permissions = injectedPerms ?? _safePermissions(app);
 
     return AppInfo(
       appName: app.appName,
@@ -60,7 +80,9 @@ class AppScanner {
   Future<AppInfo?> fetchAppWithPermissions(String packageName) async {
     final app = await DeviceApps.getApp(packageName, true);
     if (app == null) return null;
-    return mapToAppInfo(app, hasLaunchIntent: app is ApplicationWithIcon);
+    final perms = await _getNativePermissions(packageName);
+    final installer = await _getNativeInstaller(packageName);
+    return mapToAppInfo(app, hasLaunchIntent: app is ApplicationWithIcon, injectedPerms: perms, nativeInstaller: installer);
   }
 
   /// Optimized fetch pipeline:
@@ -106,15 +128,21 @@ class AppScanner {
     final futures = filteredApps.map((raw) async {
       try {
         final appWithPerms = await DeviceApps.getApp(raw.packageName, true);
+        final perms = await _getNativePermissions(raw.packageName);
+        final installer = await _getNativeInstaller(raw.packageName);
         if (appWithPerms != null) {
           return mapToAppInfo(
             appWithPerms,
             hasLaunchIntent: appWithPerms is ApplicationWithIcon,
+            injectedPerms: perms,
+            nativeInstaller: installer,
           );
         }
-        return mapToAppInfo(raw, hasLaunchIntent: raw is ApplicationWithIcon);
+        return mapToAppInfo(raw, hasLaunchIntent: raw is ApplicationWithIcon, injectedPerms: perms, nativeInstaller: installer);
       } catch (_) {
-        return mapToAppInfo(raw, hasLaunchIntent: raw is ApplicationWithIcon);
+        final perms = await _getNativePermissions(raw.packageName);
+        final installer = await _getNativeInstaller(raw.packageName);
+        return mapToAppInfo(raw, hasLaunchIntent: raw is ApplicationWithIcon, injectedPerms: perms, nativeInstaller: installer);
       }
     });
 
