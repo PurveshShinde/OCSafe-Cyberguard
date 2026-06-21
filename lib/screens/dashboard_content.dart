@@ -5,6 +5,7 @@ import 'package:ocsafe_cyberguard/core/theme/app_theme.dart';
 import 'package:ocsafe_cyberguard/providers/security_provider.dart';
 import 'package:ocsafe_cyberguard/screens/scan_screen.dart';
 import 'package:ocsafe_cyberguard/screens/reports_screen.dart';
+import 'package:ocsafe_cyberguard/screens/sms_screen.dart';
 import 'package:ocsafe_cyberguard/widgets/arc_gauge.dart';
 import 'package:ocsafe_cyberguard/services/apk_scanner.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -45,7 +46,10 @@ class _DashboardContentState extends State<DashboardContent> {
                 ],
               ),
               const SizedBox(height: 32),
+              const SizedBox(height: 32),
               _buildGaugeCard(context, provider),
+              const SizedBox(height: 32),
+              _buildSmsAlertsButton(context),
               const SizedBox(height: 40),
               _buildRecentScansSection(context, provider),
             ],
@@ -137,6 +141,50 @@ class _DashboardContentState extends State<DashboardContent> {
            );
         }),
       ],
+    );
+  }
+
+  Widget _buildSmsAlertsButton(BuildContext context) {
+    return InkWell(
+      onTap: () {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const SmsScreen()));
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF6344FF), Color(0xFFFF2E93)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(color: AppColors.primary.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))
+          ]
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
+              child: const Icon(Icons.message_rounded, color: Colors.white),
+            ),
+            const SizedBox(width: 16),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('SMS Financial Alerts', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                  SizedBox(height: 4),
+                  Text('Scan local SMS for transactions', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                ],
+              )
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Colors.white),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -32,6 +32,7 @@ dependencies:
   google_sign_in: ^7.2.0
   google_fonts: ^8.0.2
   sensors_plus: ^6.1.1
+  telephony: ^0.2.0
 
 dev_dependencies:
   flutter_test:

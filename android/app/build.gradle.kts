@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.ocsafe.ocsafe_cyberguard"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = "29.0.14206865"
 
     compileOptions {

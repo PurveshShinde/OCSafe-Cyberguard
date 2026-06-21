@@ -15,6 +15,16 @@ subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
+// Force compileSdk=36 on all subprojects (fixes device_apps stuck on compileSdkVersion 30).
+subprojects {
+    afterEvaluate {
+        val android = project.extensions.findByName("android")
+        if (android is com.android.build.gradle.LibraryExtension) {
+            android.compileSdk = 36
+        }
+    }
+}
+
 // Fix for older plugins (e.g. device_apps) that don't declare a namespace.
 // AGP 8+ requires all library modules to have a namespace.
 // This must be declared BEFORE evaluationDependsOn(":app")
