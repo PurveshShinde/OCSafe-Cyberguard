@@ -115,6 +115,7 @@ The generated APK will be located at `build/app/outputs/flutter-apk/app-release.
     <td align="center"><a href="https://github.com/PurveshShinde"><img src="https://images.weserv.nl/?url=github.com/PurveshShinde.png&w=100&h=100&fit=cover&mask=circle&maxage=7d" width="100px;" alt="Purvesh Shinde"/><br /><sub><b>Purvesh Shinde</b></sub></a></td>
     <td align="center"><a href="https://github.com/Sanjana2616"><img src="https://images.weserv.nl/?url=github.com/Sanjana2616.png&w=100&h=100&fit=cover&mask=circle&maxage=7d" width="100px;" alt="Sanjana More"/><br /><sub><b>Sanjana More</b></sub></a></td>
     <td align="center"><a href="https://github.com/ShreyaMShinde"><img src="https://images.weserv.nl/?url=github.com/ShreyaMShinde.png&w=100&h=100&fit=cover&mask=circle&maxage=7d" width="100px;" alt="Shreya Shinde"/><br /><sub><b>Shreya Shinde</b></sub></a></td>
+    <td align="center"><a href="https://github.com/ganesh121103"><img src="https://images.weserv.nl/?url=github.com/ganesh121103.png&w=100&h=100&fit=cover&mask=circle&maxage=7d" width="100px;" alt="Ganesh [Last Name]"/><br /><sub><b>Ganesh [Last Name]</b></sub></a></td>
   </tr>
 </table>
 
